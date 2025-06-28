@@ -22,6 +22,9 @@ class Config:
         # Google Cloud Storage settings
         self.gcs_bucket = self.get('gcs_bucket', os.environ.get('OMELET_GCS_BUCKET', 'omelet-f0b89.appspot.com'))
         self.use_gcs = self.get('use_gcs', os.environ.get('OMELET_USE_GCS', 'false').lower() == 'true')
+        
+        # Public webhook URL for publishing markdown
+        self.public_webhook_url = self.get('public_webhook_url', os.environ.get('OMELET_PUBLIC_WEBHOOK_URL'))
     
     def _get_default_config_path(self) -> Path:
         """Get the default configuration file path"""
@@ -61,6 +64,7 @@ class Config:
         """Save an example configuration file"""
         example_config = {
             "backend_url": "https://n8n.omelet.tech/webhook-test/3a4e5b1a-1cd3-459b-adb0-803753a95943",
+            "public_webhook_url": "https://your-webhook-url.com/webhook",
             "username": "your-username",
             "password": "your-password",
             "use_gcs": False,

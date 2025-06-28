@@ -83,9 +83,10 @@ class MarkdownProcessor:
         sorted_mappings = sorted(url_mappings.items(), key=lambda x: len(x[0]), reverse=True)
         
         for original_path, public_url in sorted_mappings:
-            # Create the pattern to match the exact image reference
-            pattern = re.escape(f']({original_path})')
-            replacement = f']({public_url})'
-            content = content.replace(pattern[1:], replacement)  # Remove the escaping of ']'
+            # Use regex to find and replace the image path in markdown syntax
+            # This pattern matches ![alt text](original_path)
+            pattern = r'(\!\[[^\]]*\]\()' + re.escape(original_path) + r'(\))'
+            replacement = r'\1' + public_url + r'\2'
+            content = re.sub(pattern, replacement, content)
         
         return content
