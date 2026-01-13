@@ -10,5 +10,6 @@
       "Bash(git commit:*)"
     ],
     "deny": []
-  }
+  },
+  "enableAllProjectMcpServers": false
 }

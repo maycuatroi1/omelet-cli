@@ -156,6 +156,65 @@ def public(file):
         raise click.Abort()
 
 
+@cli.command()
+@click.option("--file", "-f", type=click.Path(exists=True), help="Path to the .puml file")
+@click.option("--string", "-s", help="PlantUML string content")
+@click.option("--output", "-o", required=True, type=click.Path(), help="Output image path (e.g., diagram.png)")
+@click.option(
+    "--format",
+    "output_format",
+    default="png",
+    type=click.Choice(["png", "svg", "txt"]),
+    help="Output format (default: png)",
+)
+def puml(file, string, output, output_format):
+    """Convert PlantUML to image via puml.omelet.tech"""
+    if not file and not string:
+        click.echo("Error: Either --file or --string is required", err=True)
+        raise click.Abort()
+
+    if file and string:
+        click.echo("Error: Cannot use both --file and --string", err=True)
+        raise click.Abort()
+
+    # Get content from file or string
+    if file:
+        try:
+            content = Path(file).read_text(encoding="utf-8")
+        except Exception as e:
+            click.echo(f"Error reading file: {e}", err=True)
+            raise click.Abort()
+    else:
+        content = string
+
+    # Ensure content has @startuml and @enduml tags
+    content = content.strip()
+    if not content.startswith("@startuml"):
+        content = "@startuml\n" + content
+    if not content.endswith("@enduml"):
+        content = content + "\n@enduml"
+
+    # Send to PlantUML service
+    url = f"https://puml.omelet.tech/{output_format}"
+    headers = {"Content-Type": "text/plain; charset=utf-8"}
+
+    try:
+        click.echo(f"Converting PlantUML to {output_format}...")
+        response = requests.post(url, data=content.encode("utf-8"), headers=headers, timeout=30)
+        response.raise_for_status()
+
+        output_path = Path(output)
+        output_path.write_bytes(response.content)
+        click.echo(f"✓ Successfully saved image to {output}")
+
+    except requests.exceptions.RequestException as e:
+        click.echo(f"Error communicating with PlantUML service: {e}", err=True)
+        if hasattr(e, "response") and e.response is not None:
+            if "x-plantuml-diagram-error" in e.response.headers:
+                click.echo(f"PlantUML Error: {e.response.headers['x-plantuml-diagram-error']}", err=True)
+        raise click.Abort()
+
+
 def main():
     """Entry point for the CLI"""
     cli()
