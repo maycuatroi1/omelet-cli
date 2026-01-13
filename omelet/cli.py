@@ -2,7 +2,6 @@
 Main CLI module for Omelet
 """
 
-import webbrowser
 import click
 import requests
 from pathlib import Path
@@ -99,7 +98,7 @@ def buildmarkdown(file, folder):
 
 @cli.command()
 @click.argument("file", type=click.Path(exists=True))
-def public(file):
+def publish(file):
     """Publish a markdown file to the configured webhook URL"""
     file_path = Path(file)
 
@@ -139,7 +138,6 @@ def public(file):
                     click.echo(f"Title: {title}")
                     draft_url = f"https://omelet.ghost.io/ghost/#/editor/post/{post_id}"
                     click.echo(click.style(f"Draft URL: {draft_url}", fg="green", bold=True))
-                    webbrowser.open(draft_url)
                 else:
                     click.echo("No post ID found in response")
         else:
