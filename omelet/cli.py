@@ -145,59 +145,113 @@ def buildmarkdown(file, folder, no_plantuml):
         raise click.Abort()
 
 
+def process_markdown_images(file_path: Path, config: Config, processor: MarkdownProcessor, skip_plantuml: bool = False):
+    """Process PlantUML blocks and upload local images, return updated content."""
+    content = file_path.read_text(encoding="utf-8")
+    folder = file_path.parent.name
+
+    # Choose uploader based on configuration
+    uploader = None
+    if config.use_gcs:
+        auth = GCloudAuth()
+        if auth.is_authenticated():
+            uploader = GCSUploader(config.gcs_bucket, auth)
+            click.echo(f"Using Google Cloud Storage (bucket: {config.gcs_bucket})")
+    else:
+        uploader = ImageUploader(config)
+
+    # Process PlantUML blocks first
+    if not skip_plantuml:
+        puml_blocks = processor.find_plantuml_blocks(content)
+        if puml_blocks:
+            click.echo(f"Found {len(puml_blocks)} PlantUML block(s) to convert")
+            for block in puml_blocks:
+                try:
+                    image_filename = f"{block['diagram_name']}-{block['hash']}.png"
+                    image_path = file_path.parent / image_filename
+
+                    click.echo(f"Converting PlantUML: {block['diagram_name']}...")
+                    convert_plantuml_to_image(block['content'], image_path)
+                    click.echo(f"✓ Generated: {image_filename}")
+
+                    content = processor.replace_plantuml_with_image(content, block, image_filename)
+                    file_path.write_text(content, encoding="utf-8")
+                except requests.exceptions.RequestException as e:
+                    error_msg = str(e)
+                    if hasattr(e, "response") and e.response is not None:
+                        if "x-plantuml-diagram-error" in e.response.headers:
+                            error_msg = e.response.headers["x-plantuml-diagram-error"]
+                    click.echo(f"✗ Failed to convert {block['diagram_name']}: {error_msg}", err=True)
+
+    # Re-read content after PlantUML processing
+    content = file_path.read_text(encoding="utf-8")
+
+    # Find and upload local images
+    if uploader:
+        images = processor.find_local_images(content, file_path)
+        if images:
+            click.echo(f"Found {len(images)} local image(s) to upload")
+            for image_info in images:
+                try:
+                    public_url = uploader.upload_image(image_info["path"], folder)
+                    click.echo(f"✓ Uploaded: {image_info['path'].name}")
+                    url_mapping = {image_info["original"]: public_url}
+                    content = processor.replace_urls(content, url_mapping)
+                    file_path.write_text(content, encoding="utf-8")
+                except Exception as e:
+                    click.echo(f"✗ Failed to upload {image_info['path'].name}: {str(e)}", err=True)
+
+    return content
+
+
 @cli.command()
 @click.argument("file", type=click.Path(exists=True))
-def publish(file):
-    """Publish a markdown file to the configured webhook URL"""
+@click.option("--no-plantuml", is_flag=True, help="Skip PlantUML processing")
+@click.option("--no-images", is_flag=True, help="Skip image processing")
+@click.option("--featured-image", "-i", type=click.Path(exists=True), help="Featured image path")
+def publish(file, no_plantuml, no_images, featured_image):
+    """Build and publish a markdown file to Ghost CMS"""
     file_path = Path(file)
 
     if not file_path.suffix.lower() == ".md":
         click.echo(f"Error: {file} is not a markdown file", err=True)
         raise click.Abort()
 
-    # Load configuration
     config = Config()
 
-    if not config.public_webhook_url:
-        click.echo("Error: No public webhook URL configured.", err=True)
-        click.echo("Please add 'public_webhook_url' to your ~/.omelet.json file", err=True)
+    if not config.ghost_api_url or not config.ghost_admin_api_key:
+        click.echo("Error: Ghost API not configured.", err=True)
+        click.echo("Please add 'ghost_api_url' and 'ghost_admin_api_key' to your ~/.omelet.json file", err=True)
+        click.echo("Or set GHOST_API_URL and GHOST_ADMIN_API_KEY environment variables", err=True)
         raise click.Abort()
 
     try:
-        # Read the markdown file
-        content = file_path.read_text(encoding="utf-8")
+        click.echo(f"Publishing: {file}")
 
-        click.echo(f"Publishing markdown file: {file}")
-        click.echo(f"Webhook URL: {config.public_webhook_url}")
+        # Step 1: Process images (PlantUML + upload)
+        if not no_images:
+            processor = MarkdownProcessor()
+            process_markdown_images(file_path, config, processor, skip_plantuml=no_plantuml)
 
-        # Send POST request with markdown content in 'data' field
-        response = requests.post(
-            config.public_webhook_url, json={"data": content}, headers={"Content-Type": "application/json"}, timeout=30
-        )
+        # Step 2: Publish to Ghost
+        from .ghost_client import GhostClient
+        click.echo("Publishing to Ghost CMS...")
+        ghost = GhostClient(config.ghost_api_url, config.ghost_admin_api_key)
+        post = ghost.publish_markdown(str(file_path))
 
-        if response.status_code == 200:
-            click.echo("✓ Successfully published markdown file")
-            if response.text:
-                click.echo(f"Response: {response.text}")
-                data = response.json()
-                post_id = data.get("id")
-                title = data.get("title")
-                if post_id:
-                    click.echo(f"Post ID: {post_id}")
-                    click.echo(f"Title: {title}")
-                    draft_url = f"https://omelet.ghost.io/ghost/#/editor/post/{post_id}"
-                    click.echo(click.style(f"Draft URL: {draft_url}", fg="green", bold=True))
-                else:
-                    click.echo("No post ID found in response")
-        else:
-            click.echo(f"✗ Failed to publish: HTTP {response.status_code}", err=True)
-            if response.text:
-                click.echo(f"Response: {response.text}", err=True)
-            raise click.Abort()
+        click.echo(f"✓ Created post: {post['title']}")
+        click.echo(f"  ID: {post['id']}")
+        click.echo(f"  Slug: {post['slug']}")
 
-    except requests.exceptions.RequestException as e:
-        click.echo(f"Error: Network request failed - {str(e)}", err=True)
-        raise click.Abort()
+        # Step 3: Set featured image if provided
+        if featured_image:
+            click.echo(f"Uploading featured image: {featured_image}")
+            ghost.set_featured_image(post['id'], featured_image)
+            click.echo("✓ Featured image set")
+
+        edit_url = f"{config.ghost_api_url}/ghost/#/editor/post/{post['id']}"
+        click.echo(click.style(f"\nEdit URL: {edit_url}", fg="green", bold=True))
+
     except Exception as e:
         click.echo(f"Error: {str(e)}", err=True)
         raise click.Abort()

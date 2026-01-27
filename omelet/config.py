@@ -25,6 +25,10 @@ class Config:
         
         # Public webhook URL for publishing markdown
         self.public_webhook_url = self.get('public_webhook_url', os.environ.get('OMELET_PUBLIC_WEBHOOK_URL'))
+
+        # Ghost CMS settings
+        self.ghost_api_url = self.get('ghost_api_url', os.environ.get('GHOST_API_URL'))
+        self.ghost_admin_api_key = self.get('ghost_admin_api_key', os.environ.get('GHOST_ADMIN_API_KEY'))
     
     def _get_default_config_path(self) -> Path:
         """Get the default configuration file path"""
@@ -68,7 +72,9 @@ class Config:
             "username": "your-username",
             "password": "your-password",
             "use_gcs": False,
-            "gcs_bucket": "omelet-f0b89.appspot.com"
+            "gcs_bucket": "omelet-f0b89.appspot.com",
+            "ghost_api_url": "https://your-site.ghost.io",
+            "ghost_admin_api_key": "your-key-id:your-secret"
         }
         
         config_path = Path.home() / '.omelet.json.example'
