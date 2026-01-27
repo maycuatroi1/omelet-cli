@@ -3,7 +3,8 @@ Module for processing markdown files
 """
 from pathlib import Path
 import re
-from typing import List, Dict, Any
+import hashlib
+from typing import List, Dict, Any, Tuple
 
 
 class MarkdownProcessor:
@@ -90,3 +91,54 @@ class MarkdownProcessor:
             content = re.sub(pattern, replacement, content)
         
         return content
+
+    def find_plantuml_blocks(self, content: str) -> List[Dict[str, Any]]:
+        """
+        Find all PlantUML code blocks in markdown content
+
+        Args:
+            content: The markdown content
+
+        Returns:
+            List of dictionaries containing PlantUML block information
+        """
+        blocks = []
+        pattern = r'```plantuml\s*\n(.*?)```'
+
+        for match in re.finditer(pattern, content, re.DOTALL):
+            puml_content = match.group(1).strip()
+            diagram_name = self._extract_diagram_name(puml_content)
+            content_hash = hashlib.md5(puml_content.encode()).hexdigest()[:8]
+
+            blocks.append({
+                'content': puml_content,
+                'full_match': match.group(0),
+                'match_start': match.start(),
+                'match_end': match.end(),
+                'diagram_name': diagram_name,
+                'hash': content_hash
+            })
+
+        return blocks
+
+    def _extract_diagram_name(self, puml_content: str) -> str:
+        """Extract diagram name from @startuml directive"""
+        match = re.search(r'@startuml\s+(\S+)', puml_content)
+        if match:
+            return match.group(1)
+        return "diagram"
+
+    def replace_plantuml_with_image(self, content: str, block: Dict[str, Any], image_path: str) -> str:
+        """
+        Replace a PlantUML code block with an image reference
+
+        Args:
+            content: The markdown content
+            block: PlantUML block info from find_plantuml_blocks
+            image_path: Path or URL to the generated image
+
+        Returns:
+            Updated markdown content
+        """
+        image_markdown = f'![{block["diagram_name"]}]({image_path})'
+        return content.replace(block['full_match'], image_markdown)

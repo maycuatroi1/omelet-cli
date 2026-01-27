@@ -18,10 +18,29 @@ def cli():
     pass
 
 
+def convert_plantuml_to_image(puml_content: str, output_path: Path) -> bool:
+    """Convert PlantUML content to PNG image via puml.omelet.tech"""
+    content = puml_content.strip()
+    if not content.startswith("@startuml"):
+        content = "@startuml\n" + content
+    if not content.endswith("@enduml"):
+        content = content + "\n@enduml"
+
+    url = "https://puml.omelet.tech/png"
+    headers = {"Content-Type": "text/plain; charset=utf-8"}
+
+    response = requests.post(url, data=content.encode("utf-8"), headers=headers, timeout=60)
+    response.raise_for_status()
+
+    output_path.write_bytes(response.content)
+    return True
+
+
 @cli.command()
 @click.argument("file", type=click.Path(exists=True))
 @click.option("--folder", "-f", help="Folder name for organizing uploads (defaults to parent folder)")
-def buildmarkdown(file, folder):
+@click.option("--no-plantuml", is_flag=True, help="Skip PlantUML processing")
+def buildmarkdown(file, folder, no_plantuml):
     """Process a markdown file and upload local images"""
     file_path = Path(file)
 
@@ -56,6 +75,36 @@ def buildmarkdown(file, folder):
 
     try:
         # Read the markdown file
+        content = file_path.read_text(encoding="utf-8")
+
+        # Process PlantUML blocks first
+        if not no_plantuml:
+            puml_blocks = processor.find_plantuml_blocks(content)
+            if puml_blocks:
+                click.echo(f"Found {len(puml_blocks)} PlantUML block(s) to convert")
+
+                for block in puml_blocks:
+                    try:
+                        image_filename = f"{block['diagram_name']}-{block['hash']}.png"
+                        image_path = file_path.parent / image_filename
+
+                        click.echo(f"Converting PlantUML: {block['diagram_name']}...")
+                        convert_plantuml_to_image(block['content'], image_path)
+                        click.echo(f"✓ Generated: {image_filename}")
+
+                        content = processor.replace_plantuml_with_image(content, block, image_filename)
+                        file_path.write_text(content, encoding="utf-8")
+
+                    except requests.exceptions.RequestException as e:
+                        error_msg = str(e)
+                        if hasattr(e, "response") and e.response is not None:
+                            if "x-plantuml-diagram-error" in e.response.headers:
+                                error_msg = e.response.headers["x-plantuml-diagram-error"]
+                        click.echo(f"✗ Failed to convert {block['diagram_name']}: {error_msg}", err=True)
+            else:
+                click.echo("No PlantUML blocks found")
+
+        # Re-read content after PlantUML processing
         content = file_path.read_text(encoding="utf-8")
 
         # Find all local images
