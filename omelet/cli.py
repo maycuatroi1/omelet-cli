@@ -350,13 +350,11 @@ def generate_image(prompt, output, blog, style, output_opt, model):
     # Resolve output path: -o flag takes precedence over positional arg
     output_path = output_opt or output
 
-    # Resolve API key: config file first, then env var
+    # Resolve API key: config file -> env var -> prompt user
     config = Config()
     api_key = config.google_api_key
     if not api_key:
-        click.echo("Error: Google API key not found.", err=True)
-        click.echo("Set 'google_api_key' in ~/.omelet.json or GOOGLE_API_KEY env var.", err=True)
-        raise click.Abort()
+        api_key = click.prompt("Google API key (GOOGLE_API_KEY)", hide_input=True)
 
     generator = GeminiImageGenerator(api_key=api_key, model=model)
 
