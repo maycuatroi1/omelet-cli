@@ -9,5 +9,6 @@ from .markdown_processor import MarkdownProcessor
 from .gcs_uploader import GCSUploader
 from .config import Config
 from .ghost_client import GhostClient
+from .gemini_image import GeminiImageGenerator
 
-__all__ = ['cli', 'MarkdownProcessor', 'GCSUploader', 'Config', 'GhostClient']
+__all__ = ['cli', 'MarkdownProcessor', 'GCSUploader', 'Config', 'GhostClient', 'GeminiImageGenerator']

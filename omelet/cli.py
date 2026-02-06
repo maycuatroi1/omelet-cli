@@ -316,6 +316,79 @@ def puml(file, string, output, output_format):
         raise click.Abort()
 
 
+@cli.command("generate-image")
+@click.argument("prompt", required=False)
+@click.argument("output", required=False)
+@click.option("--blog", "-b", help="Generate featured image for a blog topic")
+@click.option(
+    "--style",
+    "-s",
+    default="academic",
+    type=click.Choice(["academic", "tech", "minimal", "colorful"]),
+    help="Image style preset (default: academic)",
+)
+@click.option("--output", "-o", "output_opt", type=click.Path(), help="Output file path")
+@click.option("--model", "-m", default="gemini-3-pro-image-preview", help="Gemini model to use")
+def generate_image(prompt, output, blog, style, output_opt, model):
+    """Generate images using Google Gemini API.
+
+    \b
+    Examples:
+      omelet generate-image "A futuristic city" city.png
+      omelet generate-image --blog "Binary Search Trees" -o bst/featured.png
+      omelet generate-image --blog "Python Tips" --style tech -o python/featured.png
+
+    \b
+    Styles:
+      academic  - Black & white textbook diagrams (default)
+      tech      - Dark gradient with neon elements
+      minimal   - Clean white background, simple line art
+      colorful  - Vibrant gradients, bold colors
+    """
+    from .gemini_image import GeminiImageGenerator
+
+    # Resolve output path: -o flag takes precedence over positional arg
+    output_path = output_opt or output
+
+    # Resolve API key: config file first, then env var
+    config = Config()
+    api_key = config.google_api_key
+    if not api_key:
+        click.echo("Error: Google API key not found.", err=True)
+        click.echo("Set 'google_api_key' in ~/.omelet.json or GOOGLE_API_KEY env var.", err=True)
+        raise click.Abort()
+
+    generator = GeminiImageGenerator(api_key=api_key, model=model)
+
+    if blog:
+        if not output_path:
+            output_path = "featured-image.png"
+        click.echo(f"Generating blog featured image for: {blog}")
+        click.echo(f"Style: {style}")
+        try:
+            saved = generator.generate_blog_featured_image(blog, output_path, style)
+            click.echo(f"Image saved: {saved}")
+        except RuntimeError as e:
+            click.echo(f"Error: {e}", err=True)
+            raise click.Abort()
+    elif prompt and output_path:
+        click.echo(f"Generating image...")
+        click.echo(f"Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
+        try:
+            saved = generator.generate_image(prompt, output_path)
+            click.echo(f"Image saved: {saved}")
+        except RuntimeError as e:
+            click.echo(f"Error: {e}", err=True)
+            raise click.Abort()
+    else:
+        click.echo("Error: Provide a prompt + output path, or use --blog.", err=True)
+        raise click.Abort()
+
+
+# Alias: omelet genimg
+cli.add_command(generate_image, "genimg")
+
+
 def main():
     """Entry point for the CLI"""
     cli()

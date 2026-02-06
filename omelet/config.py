@@ -29,6 +29,9 @@ class Config:
         # Ghost CMS settings
         self.ghost_api_url = self.get('ghost_api_url', os.environ.get('GHOST_API_URL'))
         self.ghost_admin_api_key = self.get('ghost_admin_api_key', os.environ.get('GHOST_ADMIN_API_KEY'))
+
+        # Google Gemini API
+        self.google_api_key = self.get('google_api_key', os.environ.get('GOOGLE_API_KEY'))
     
     def _get_default_config_path(self) -> Path:
         """Get the default configuration file path"""
@@ -74,7 +77,8 @@ class Config:
             "use_gcs": False,
             "gcs_bucket": "omelet-f0b89.appspot.com",
             "ghost_api_url": "https://your-site.ghost.io",
-            "ghost_admin_api_key": "your-key-id:your-secret"
+            "ghost_admin_api_key": "your-key-id:your-secret",
+            "google_api_key": "your-google-api-key"
         }
         
         config_path = Path.home() / '.omelet.json.example'
