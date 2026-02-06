@@ -48,11 +48,11 @@ Create `.omelet.json` in your home directory or current working directory:
 
 ```json
 {
-  "backend_url": "https://n8n.omelet.tech/webhook-test/3a4e5b1a-1cd3-459b-adb0-803753a95943",
+  "backend_url": "https://your-backend-url.com/webhook",
   "username": "your-username",
   "password": "your-password",
   "use_gcs": false,
-  "gcs_bucket": "omelet-f0b89.appspot.com"
+  "gcs_bucket": "your-bucket-name"
 }
 ```
 

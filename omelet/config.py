@@ -15,12 +15,12 @@ class Config:
         self.config = self._load_config()
         
         # Set up properties for easy access
-        self.backend_url = self.get('backend_url', 'https://n8n.omelet.tech/webhook-test/3a4e5b1a-1cd3-459b-adb0-803753a95943')
+        self.backend_url = self.get('backend_url', os.environ.get('OMELET_BACKEND_URL'))
         self.username = self.get('username', os.environ.get('OMELET_USERNAME'))
         self.password = self.get('password', os.environ.get('OMELET_PASSWORD'))
         
         # Google Cloud Storage settings
-        self.gcs_bucket = self.get('gcs_bucket', os.environ.get('OMELET_GCS_BUCKET', 'omelet-f0b89.appspot.com'))
+        self.gcs_bucket = self.get('gcs_bucket', os.environ.get('OMELET_GCS_BUCKET'))
         self.use_gcs = self.get('use_gcs', os.environ.get('OMELET_USE_GCS', 'false').lower() == 'true')
         
         # Public webhook URL for publishing markdown
@@ -67,22 +67,3 @@ class Config:
         """Get a configuration value"""
         return self.config.get(key, default)
     
-    def save_example_config(self):
-        """Save an example configuration file"""
-        example_config = {
-            "backend_url": "https://n8n.omelet.tech/webhook-test/3a4e5b1a-1cd3-459b-adb0-803753a95943",
-            "public_webhook_url": "https://your-webhook-url.com/webhook",
-            "username": "your-username",
-            "password": "your-password",
-            "use_gcs": False,
-            "gcs_bucket": "omelet-f0b89.appspot.com",
-            "ghost_api_url": "https://your-site.ghost.io",
-            "ghost_admin_api_key": "your-key-id:your-secret",
-            "google_api_key": "your-google-api-key"
-        }
-        
-        config_path = Path.home() / '.omelet.json.example'
-        with open(config_path, 'w') as f:
-            json.dump(example_config, f, indent=2)
-        
-        return config_path
