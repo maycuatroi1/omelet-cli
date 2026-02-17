@@ -316,6 +316,133 @@ def puml(file, string, output, output_format):
         raise click.Abort()
 
 
+@cli.command()
+@click.argument("file", required=False, type=click.Path(exists=True))
+@click.option("--token", "-t", help="QuillBot Firebase JWT token (useridtoken)")
+@click.option("--text", help="Direct text to check instead of a file")
+@click.option("--section", help="Check only a specific section (for LaTeX files)")
+@click.option("--language", default=None, help="Language code (auto-detected if not specified)")
+@click.option("--no-explain", is_flag=True, help="Disable explanation categories")
+@click.option("--raw", is_flag=True, help="Output raw JSON response")
+@click.option("--all-sections", is_flag=True, help="Check each LaTeX section individually")
+def aicheck(file, token, text, section, language, no_explain, raw, all_sections):
+    """Check text or LaTeX files for AI-generated content using QuillBot.
+
+    \b
+    Examples:
+      omelet aicheck paper.tex
+      omelet aicheck --text "Some text to check"
+      omelet aicheck --section introduction paper.tex
+      omelet aicheck --all-sections paper.tex
+
+    \b
+    Token can be set via:
+      - --token flag
+      - QUILLBOT_TOKEN env var
+      - quillbot_token in ~/.omelet.json
+    """
+    import json as json_mod
+    import time
+    from .ai_check import (
+        strip_latex,
+        extract_sections,
+        detect_language,
+        check_ai_score,
+        display_results,
+        TEXT_LOWER_LIMIT,
+    )
+
+    if not file and not text:
+        click.echo("Error: Provide a file or use --text", err=True)
+        raise click.Abort()
+
+    # Resolve token: flag -> config -> env -> prompt
+    if not token:
+        config = Config()
+        token = config.quillbot_token
+    if not token:
+        token = click.prompt("QuillBot token (useridtoken)", hide_input=True)
+
+    explain = not no_explain
+
+    if text:
+        check_text = text
+        label = "Direct Text"
+    else:
+        file_path = Path(file)
+        content = file_path.read_text(encoding="utf-8")
+        is_latex = file_path.suffix.lower() in (".tex", ".latex")
+
+        if is_latex and all_sections:
+            sections = extract_sections(content)
+            if not sections:
+                click.echo("No sections found in file", err=True)
+                raise click.Abort()
+
+            click.echo(f"Found {len(sections)} sections: {', '.join(sections.keys())}")
+
+            lang_code = language
+            if not lang_code:
+                first_text = next(iter(sections.values()))
+                lang_code, lang_name = detect_language(first_text, token)
+                click.echo(f"Detected language: {lang_name} ({lang_code})")
+
+            for sec_name, sec_text in sections.items():
+                if len(sec_text) < TEXT_LOWER_LIMIT:
+                    click.echo(f"\nSkipping '{sec_name}' (too short)")
+                    continue
+                click.echo(f"\nChecking section: {sec_name} ({len(sec_text)} chars)...")
+                result = check_ai_score(sec_text, token, lang_code, explain)
+                if raw:
+                    click.echo(json_mod.dumps(result, indent=2))
+                else:
+                    display_results(result, label=sec_name.title())
+                time.sleep(1)
+            return
+
+        if is_latex and section:
+            sections = extract_sections(content)
+            match = section.lower()
+            found = None
+            for name, body in sections.items():
+                if match in name.lower():
+                    found = (name, body)
+                    break
+            if not found:
+                click.echo(
+                    f"Section '{section}' not found. Available: {', '.join(sections.keys())}",
+                    err=True,
+                )
+                raise click.Abort()
+            check_text = found[1]
+            label = found[0].title()
+        elif is_latex:
+            check_text = strip_latex(content)
+            label = file_path.name
+        else:
+            # Plain text / markdown / any other file
+            check_text = content
+            label = file_path.name
+
+    # Detect language
+    lang_code = language
+    if not lang_code:
+        click.echo("Detecting language...")
+        lang_code, lang_name = detect_language(check_text, token)
+        click.echo(f"Detected language: {lang_name} ({lang_code})")
+
+    click.echo(f"Text length: {len(check_text)} characters")
+    click.echo("Checking AI content...")
+
+    result = check_ai_score(check_text, token, lang_code, explain)
+
+    if raw:
+        import json as json_mod
+        click.echo(json_mod.dumps(result, indent=2))
+    else:
+        display_results(result, label=label)
+
+
 @cli.command("generate-image")
 @click.argument("prompt", required=False)
 @click.argument("output", required=False)
