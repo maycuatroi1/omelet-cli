@@ -349,6 +349,7 @@ def aicheck(file, token, text, section, language, no_explain, raw, all_sections)
         detect_language,
         check_ai_score,
         display_results,
+        is_auth_error,
         TEXT_LOWER_LIMIT,
     )
 
@@ -357,11 +358,21 @@ def aicheck(file, token, text, section, language, no_explain, raw, all_sections)
         raise click.Abort()
 
     # Resolve token: flag -> config -> env -> prompt
+    config = Config()
     if not token:
-        config = Config()
         token = config.quillbot_token
     if not token:
         token = click.prompt("QuillBot token (useridtoken)", hide_input=True)
+        config.save("quillbot_token", token)
+        click.echo("Token saved to ~/.omelet.json")
+
+    def refresh_token() -> str:
+        """Prompt for a new token and save it."""
+        click.echo(click.style("Token expired or invalid.", fg="yellow"))
+        new_token = click.prompt("Enter new QuillBot token", hide_input=True)
+        config.save("quillbot_token", new_token)
+        click.echo("New token saved to ~/.omelet.json")
+        return new_token
 
     explain = not no_explain
 
@@ -393,6 +404,9 @@ def aicheck(file, token, text, section, language, no_explain, raw, all_sections)
                     continue
                 click.echo(f"\nChecking section: {sec_name} ({len(sec_text)} chars)...")
                 result = check_ai_score(sec_text, token, lang_code, explain)
+                if is_auth_error(result):
+                    token = refresh_token()
+                    result = check_ai_score(sec_text, token, lang_code, explain)
                 if raw:
                     click.echo(json_mod.dumps(result, indent=2))
                 else:
@@ -436,8 +450,11 @@ def aicheck(file, token, text, section, language, no_explain, raw, all_sections)
 
     result = check_ai_score(check_text, token, lang_code, explain)
 
+    if is_auth_error(result):
+        token = refresh_token()
+        result = check_ai_score(check_text, token, lang_code, explain)
+
     if raw:
-        import json as json_mod
         click.echo(json_mod.dumps(result, indent=2))
     else:
         display_results(result, label=label)

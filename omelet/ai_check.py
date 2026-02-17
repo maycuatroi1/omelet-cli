@@ -3,10 +3,7 @@ QuillBot AI Content Detector module.
 Checks text and LaTeX papers for AI-generated content using QuillBot's API.
 """
 
-import json
 import re
-import time
-from pathlib import Path
 from typing import Optional
 
 import click
@@ -197,9 +194,20 @@ def check_ai_score(
     except requests.exceptions.HTTPError as e:
         status = e.response.status_code if e.response else "unknown"
         body_text = e.response.text[:500] if e.response else ""
-        return {"error": f"HTTP {status}: {body_text}"}
+        return {"error": f"HTTP {status}: {body_text}", "status": status}
     except Exception as e:
         return {"error": str(e)}
+
+
+def is_auth_error(result: dict) -> bool:
+    """Check if a result indicates an expired/invalid token."""
+    if "error" not in result:
+        return False
+    status = result.get("status")
+    if status in (401, 403):
+        return True
+    error_msg = result["error"].lower()
+    return "401" in error_msg or "403" in error_msg or "unauthorized" in error_msg
 
 
 def format_chunk_result(chunk: dict) -> str:

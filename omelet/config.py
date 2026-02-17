@@ -69,4 +69,19 @@ class Config:
     def get(self, key: str, default=None):
         """Get a configuration value"""
         return self.config.get(key, default)
+
+    def save(self, key: str, value) -> None:
+        """Save a configuration value to ~/.omelet.json"""
+        config_path = Path.home() / '.omelet.json'
+        data = {}
+        if config_path.exists():
+            try:
+                with open(config_path, 'r') as f:
+                    data = json.load(f)
+            except Exception:
+                pass
+        data[key] = value
+        with open(config_path, 'w') as f:
+            json.dump(data, f, indent=2)
+        self.config[key] = value
     

@@ -148,3 +148,4 @@ cython_debug/
 # Config files (but not examples)
 .omelet.json
 !.omelet.json.example
+gcs-credentials.json
