@@ -34,9 +34,11 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
                     try:
                         value = json.loads(value.replace("'", '"'))
                     except json.JSONDecodeError:
-                        # Handle YAML-style arrays without quotes: [a, b, c]
-                        inner = value[1:-1]
-                        value = [item.strip() for item in inner.split(',') if item.strip()]
+                        inner = value[1:-1].strip()
+                        if inner:
+                            value = [item.strip().strip('"').strip("'") for item in inner.split(',')]
+                        else:
+                            value = []
                 elif value.startswith('"') and value.endswith('"'):
                     value = value[1:-1]
                 elif value.startswith("'") and value.endswith("'"):
