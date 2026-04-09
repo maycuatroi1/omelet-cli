@@ -24,11 +24,31 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
         fm_text = match.group(1)
         body = content[match.end():]
 
+        current_key = None
+        current_list = None
+
         for line in fm_text.split('\n'):
-            if ':' in line:
+            stripped = line.strip()
+            if stripped.startswith('- ') and current_key is not None and current_list is not None:
+                item = stripped[2:].strip().strip('"').strip("'")
+                if item:
+                    current_list.append(item)
+                continue
+
+            if current_key is not None and current_list is not None:
+                frontmatter[current_key] = current_list
+                current_key = None
+                current_list = None
+
+            if ':' in line and not line.startswith(' ') and not line.startswith('\t'):
                 key, value = line.split(':', 1)
                 key = key.strip()
                 value = value.strip()
+
+                if not value:
+                    current_key = key
+                    current_list = []
+                    continue
 
                 if value.startswith('[') and value.endswith(']'):
                     try:
@@ -45,6 +65,9 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
                     value = value[1:-1]
 
                 frontmatter[key] = value
+
+        if current_key is not None and current_list is not None:
+            frontmatter[current_key] = current_list
 
         return frontmatter, body
 
@@ -188,7 +211,12 @@ class GhostClient:
 
         tags = frontmatter.get('tags', frontmatter.get('keywords', []))
         if isinstance(tags, str):
-            tags = [tags]
+            if ',' in tags:
+                tags = [t.strip() for t in tags.split(',') if t.strip()]
+            elif tags:
+                tags = [tags]
+            else:
+                tags = []
 
         if slug is None:
             slug = Path(markdown_path).parent.name
