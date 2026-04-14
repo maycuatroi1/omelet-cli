@@ -128,6 +128,28 @@ class MarkdownProcessor:
             return match.group(1)
         return "diagram"
 
+    def normalize_punctuation(self, content: str) -> str:
+        """Replace em-dash with hyphen and remove `---` divider lines in body.
+
+        YAML frontmatter at the top of the file is preserved as-is.
+        """
+        if content.startswith('---\n'):
+            end = content.find('\n---\n', 4)
+            if end != -1:
+                head = content[:end + 5]
+                body = content[end + 5:]
+            else:
+                head = ''
+                body = content
+        else:
+            head = ''
+            body = content
+
+        body = body.replace('—', '-')
+        body = re.sub(r'(?m)^[ \t]*---[ \t]*\n', '', body)
+
+        return head + body
+
     def replace_plantuml_with_image(self, content: str, block: Dict[str, Any], image_path: str) -> str:
         """
         Replace a PlantUML code block with an image reference

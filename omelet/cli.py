@@ -228,9 +228,18 @@ def publish(file, no_plantuml, no_images, featured_image):
     try:
         click.echo(f"Publishing: {file}")
 
+        processor = MarkdownProcessor()
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            original = f.read()
+        normalized = processor.normalize_punctuation(original)
+        if normalized != original:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(normalized)
+            click.echo("✓ Normalized punctuation (em-dash → hyphen, removed body `---` dividers)")
+
         # Step 1: Process images (PlantUML + upload)
         if not no_images:
-            processor = MarkdownProcessor()
             process_markdown_images(file_path, config, processor, skip_plantuml=no_plantuml)
 
         # Step 2: Publish to Ghost
