@@ -12,7 +12,6 @@ import markdown
 import requests
 from markdown.extensions.tables import TableExtension
 from markdown.extensions.fenced_code import FencedCodeExtension
-from markdown.extensions.codehilite import CodeHiliteExtension
 
 
 def parse_frontmatter(content: str) -> tuple[dict, str]:
@@ -75,14 +74,26 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
 
 
 def markdown_to_html(md_content: str) -> str:
-    """Convert markdown to HTML."""
+    """Convert markdown to HTML for Ghost CMS.
+
+    Ghost's HTML-to-Lexical parser recognizes fenced code blocks only when they
+    arrive as a bare <pre><code class="language-X">...</code></pre>. Wrapping
+    them in <div class="highlight"> (CodeHilite) or adding inline <span> tags
+    breaks Ghost's code-card detection and flattens the content into a <p>
+    with <br> separators. So we stick to FencedCodeExtension with no highlight
+    wrapper.
+
+    nl2br is intentionally omitted: it injects <br> inside paragraphs for every
+    single newline, which both bloats Ghost output and can confuse its parser
+    on multi-line blockquotes and list items.
+    """
     html = markdown.markdown(
         md_content,
         extensions=[
             TableExtension(),
             FencedCodeExtension(),
-            CodeHiliteExtension(css_class='highlight', guess_lang=False),
-            'nl2br'
+            'sane_lists',
+            'attr_list',
         ]
     )
     return html
