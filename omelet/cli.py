@@ -469,6 +469,12 @@ def aicheck(file, token, text, section, language, no_explain, raw, all_sections)
         display_results(result, label=label)
 
 
+PROVIDER_DEFAULT_MODEL = {
+    "openai": "gpt-image-2",
+    "gemini": "gemini-3-pro-image-preview",
+}
+
+
 @cli.command("generate-image")
 @click.argument("prompt", required=False)
 @click.argument("output", required=False)
@@ -481,15 +487,38 @@ def aicheck(file, token, text, section, language, no_explain, raw, all_sections)
     help="Image style preset (default: academic)",
 )
 @click.option("--output", "-o", "output_opt", type=click.Path(), help="Output file path")
-@click.option("--model", "-m", default="gemini-3-pro-image-preview", help="Gemini model to use")
-def generate_image(prompt, output, blog, style, output_opt, model):
-    """Generate images using Google Gemini API.
+@click.option(
+    "--provider",
+    "-p",
+    default="openai",
+    type=click.Choice(["openai", "gemini"]),
+    help="Image generation provider (default: openai)",
+)
+@click.option("--model", "-m", default=None, help="Model to use (defaults per provider)")
+@click.option(
+    "--size",
+    default="1536x1024",
+    help="Image size for OpenAI (1024x1024, 1536x1024, 1024x1536)",
+)
+@click.option(
+    "--quality",
+    default="high",
+    type=click.Choice(["auto", "low", "medium", "high"]),
+    help="Image quality for OpenAI (default: high)",
+)
+def generate_image(prompt, output, blog, style, output_opt, provider, model, size, quality):
+    """Generate images using OpenAI or Google Gemini.
 
     \b
     Examples:
       omelet generate-image "A futuristic city" city.png
       omelet generate-image --blog "Binary Search Trees" -o bst/featured.png
-      omelet generate-image --blog "Python Tips" --style tech -o python/featured.png
+      omelet generate-image -p gemini --blog "Python Tips" --style tech -o py/feat.png
+
+    \b
+    Providers:
+      openai  - gpt-image-2 (default)
+      gemini  - gemini-3-pro-image-preview
 
     \b
     Styles:
@@ -498,18 +527,32 @@ def generate_image(prompt, output, blog, style, output_opt, model):
       minimal   - Clean white background, simple line art
       colorful  - Vibrant gradients, bold colors
     """
-    from .gemini_image import GeminiImageGenerator
-
-    # Resolve output path: -o flag takes precedence over positional arg
     output_path = output_opt or output
 
-    # Resolve API key: config file -> env var -> prompt user
     config = Config()
-    api_key = config.google_api_key
-    if not api_key:
-        api_key = click.prompt("Google API key (GOOGLE_API_KEY)", hide_input=True)
+    resolved_model = model or PROVIDER_DEFAULT_MODEL[provider]
 
-    generator = GeminiImageGenerator(api_key=api_key, model=model)
+    if provider == "openai":
+        from .openai_image import OpenAIImageGenerator
+
+        api_key = config.openai_api_key
+        if not api_key:
+            api_key = click.prompt("OpenAI API key (OPENAI_API_KEY)", hide_input=True)
+            config.save("openai_api_key", api_key)
+
+        generator = OpenAIImageGenerator(api_key=api_key, model=resolved_model)
+        gen_kwargs = {"size": size, "quality": quality}
+    else:
+        from .gemini_image import GeminiImageGenerator
+
+        api_key = config.google_api_key
+        if not api_key:
+            api_key = click.prompt("Google API key (GOOGLE_API_KEY)", hide_input=True)
+
+        generator = GeminiImageGenerator(api_key=api_key, model=resolved_model)
+        gen_kwargs = {}
+
+    click.echo(f"Provider: {provider} ({resolved_model})")
 
     if blog:
         if not output_path:
@@ -517,7 +560,12 @@ def generate_image(prompt, output, blog, style, output_opt, model):
         click.echo(f"Generating blog featured image for: {blog}")
         click.echo(f"Style: {style}")
         try:
-            saved = generator.generate_blog_featured_image(blog, output_path, style)
+            if provider == "openai":
+                saved = generator.generate_blog_featured_image(
+                    blog, output_path, style, size=size, quality=quality
+                )
+            else:
+                saved = generator.generate_blog_featured_image(blog, output_path, style)
             click.echo(f"Image saved: {saved}")
         except RuntimeError as e:
             click.echo(f"Error: {e}", err=True)
@@ -526,7 +574,7 @@ def generate_image(prompt, output, blog, style, output_opt, model):
         click.echo(f"Generating image...")
         click.echo(f"Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
         try:
-            saved = generator.generate_image(prompt, output_path)
+            saved = generator.generate_image(prompt, output_path, **gen_kwargs)
             click.echo(f"Image saved: {saved}")
         except RuntimeError as e:
             click.echo(f"Error: {e}", err=True)

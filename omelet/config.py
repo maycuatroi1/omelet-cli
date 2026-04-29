@@ -33,6 +33,9 @@ class Config:
         # Google Gemini API
         self.google_api_key = self.get('google_api_key', os.environ.get('GOOGLE_API_KEY'))
 
+        # OpenAI API
+        self.openai_api_key = self.get('openai_api_key', os.environ.get('OPENAI_API_KEY'))
+
         # QuillBot AI Detector
         self.quillbot_token = self.get('quillbot_token', os.environ.get('QUILLBOT_TOKEN'))
     

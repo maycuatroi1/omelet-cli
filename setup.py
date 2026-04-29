@@ -47,6 +47,7 @@ setup(
         "requests>=2.25.0",
         "PyJWT>=2.0.0",
         "markdown>=3.0.0",
+        "openai>=1.0.0",
     ],
     extras_require={
         "dev": [
