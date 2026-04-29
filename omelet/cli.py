@@ -10,6 +10,7 @@ from .image_uploader import ImageUploader
 from .gcs_uploader import GCSUploader
 from .gcloud_auth import GCloudAuth
 from .config import Config
+from .image_metadata import strip_image_metadata, scrub_watermark as scrub_image
 
 
 @click.group()
@@ -122,6 +123,8 @@ def buildmarkdown(file, folder, no_plantuml):
         with click.progressbar(images, label="Uploading images") as bar:
             for image_info in bar:
                 try:
+                    if strip_image_metadata(image_info["path"]):
+                        click.echo(f"\n✓ Stripped metadata: {image_info['path'].name}")
                     public_url = uploader.upload_image(image_info["path"], folder)
                     click.echo(f"\n✓ Uploaded: {image_info['path'].name} -> {public_url}")
 
@@ -145,7 +148,7 @@ def buildmarkdown(file, folder, no_plantuml):
         raise click.Abort()
 
 
-def process_markdown_images(file_path: Path, config: Config, processor: MarkdownProcessor, skip_plantuml: bool = False):
+def process_markdown_images(file_path: Path, config: Config, processor: MarkdownProcessor, skip_plantuml: bool = False, scrub: bool = False):
     """Process PlantUML blocks and upload local images, return updated content."""
     content = file_path.read_text(encoding="utf-8")
     folder = file_path.parent.name
@@ -193,6 +196,10 @@ def process_markdown_images(file_path: Path, config: Config, processor: Markdown
             click.echo(f"Found {len(images)} local image(s) to upload")
             for image_info in images:
                 try:
+                    if scrub and scrub_image(image_info["path"]):
+                        click.echo(f"✓ Scrubbed watermark: {image_info['path'].name}")
+                    if strip_image_metadata(image_info["path"]):
+                        click.echo(f"✓ Stripped metadata: {image_info['path'].name}")
                     public_url = uploader.upload_image(image_info["path"], folder)
                     click.echo(f"✓ Uploaded: {image_info['path'].name}")
                     url_mapping = {image_info["original"]: public_url}
@@ -209,7 +216,8 @@ def process_markdown_images(file_path: Path, config: Config, processor: Markdown
 @click.option("--no-plantuml", is_flag=True, help="Skip PlantUML processing")
 @click.option("--no-images", is_flag=True, help="Skip image processing")
 @click.option("--featured-image", "-i", type=click.Path(exists=True), help="Featured image path")
-def publish(file, no_plantuml, no_images, featured_image):
+@click.option("--scrub-watermark", is_flag=True, help="Disrupt SynthID/AI watermark via downscale+noise+upscale before upload")
+def publish(file, no_plantuml, no_images, featured_image, scrub_watermark):
     """Build and publish a markdown file to Ghost CMS"""
     file_path = Path(file)
 
@@ -240,7 +248,7 @@ def publish(file, no_plantuml, no_images, featured_image):
 
         # Step 1: Process images (PlantUML + upload)
         if not no_images:
-            process_markdown_images(file_path, config, processor, skip_plantuml=no_plantuml)
+            process_markdown_images(file_path, config, processor, skip_plantuml=no_plantuml, scrub=scrub_watermark)
 
         # Step 2: Publish to Ghost
         from .ghost_client import GhostClient
@@ -254,6 +262,10 @@ def publish(file, no_plantuml, no_images, featured_image):
 
         # Step 3: Set featured image if provided
         if featured_image:
+            if scrub_watermark and scrub_image(featured_image):
+                click.echo(f"✓ Scrubbed watermark: {Path(featured_image).name}")
+            if strip_image_metadata(featured_image):
+                click.echo(f"✓ Stripped metadata: {Path(featured_image).name}")
             click.echo(f"Uploading featured image: {featured_image}")
             ghost.set_featured_image(post['id'], featured_image)
             click.echo("✓ Featured image set")
