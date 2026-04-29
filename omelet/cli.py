@@ -482,9 +482,9 @@ PROVIDER_DEFAULT_MODEL = {
 @click.option(
     "--style",
     "-s",
-    default="academic",
+    default="minimal",
     type=click.Choice(["academic", "tech", "minimal", "colorful"]),
-    help="Image style preset (default: academic)",
+    help="Image style preset (default: minimal)",
 )
 @click.option("--output", "-o", "output_opt", type=click.Path(), help="Output file path")
 @click.option(
@@ -522,9 +522,9 @@ def generate_image(prompt, output, blog, style, output_opt, provider, model, siz
 
     \b
     Styles:
-      academic  - Black & white textbook diagrams (default)
+      minimal   - Clean white background, simple line art (default)
+      academic  - Black & white textbook diagrams
       tech      - Dark gradient with neon elements
-      minimal   - Clean white background, simple line art
       colorful  - Vibrant gradients, bold colors
     """
     output_path = output_opt or output
