@@ -29,6 +29,33 @@ STYLE_PROMPTS = {
     "colorful": (
         "Vibrant gradient background, modern flat design, bold colors, eye-catching composition"
     ),
+    "constructivism": (
+        "Russian Constructivism poster style merged with modern minimalism. "
+        "Asymmetric composition with strong 45-degree diagonal energy. "
+        "Color palette strictly limited: deep red (#C8102E), pure black, off-white cream (#F5F1E8), "
+        "single accent of deep navy blue. Flat colors only, NO gradients. "
+        "Bold geometric shapes overlapping (rectangles, circles, triangles). "
+        "Heavy sans-serif block typography for any text elements. "
+        "Diagonal red wedge composition reminiscent of El Lissitzky's 'Beat the Whites with the Red Wedge' (1919). "
+        "Generous negative space. High contrast, propaganda-poster boldness, machine-aesthetic. "
+        "Reference: Rodchenko, El Lissitzky, Mayakovsky 1919-1925 designs. "
+        "NOT generic flat design, NOT Bauhaus pastel — must have aggressive constructivist energy."
+    ),
+    "socialist-realism": (
+        "Soviet Socialist Realism propaganda poster style merged with modern minimalism. "
+        "Monumental, heroic, optimistic composition with one central idealized figure "
+        "(scientist, engineer, or worker) in a confident heroic three-quarter pose, "
+        "looking forward with determination. Slightly low camera angle for monumental feel. "
+        "Painterly brush strokes, NOT photorealistic. Idealized realism. "
+        "Dramatic chiaroscuro lighting from upper left, casting confident shadow. "
+        "Color palette: dominant deep crimson red (#A8121E), warm cream/parchment background (#E8DCC4), "
+        "strong black outlines, golden ochre highlights (#C4923A), muted teal accents. "
+        "Limited to 5 colors max. Bright optimistic palette. "
+        "Background elements (minimalist): rising sun with red rays, abstracted industrial silhouettes, "
+        "stylized wheat-stalks or banner motifs. Generous negative space. "
+        "Reference: Aleksandr Deyneka, Vera Mukhina, Vasily Yefanov, Soviet 1940s scientific posters. "
+        "Modern minimalist execution with socialist realism DNA — heroic, painterly, propagandistic."
+    ),
 }
 
 

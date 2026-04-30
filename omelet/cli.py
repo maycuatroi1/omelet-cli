@@ -495,16 +495,23 @@ PROVIDER_DEFAULT_MODEL = {
     "--style",
     "-s",
     default="minimal",
-    type=click.Choice(["academic", "tech", "minimal", "colorful"]),
+    type=click.Choice([
+        "academic",
+        "tech",
+        "minimal",
+        "colorful",
+        "constructivism",
+        "socialist-realism",
+    ]),
     help="Image style preset (default: minimal)",
 )
 @click.option("--output", "-o", "output_opt", type=click.Path(), help="Output file path")
 @click.option(
     "--provider",
     "-p",
-    default="openai",
+    default="gemini",
     type=click.Choice(["openai", "gemini"]),
-    help="Image generation provider (default: openai)",
+    help="Image generation provider (default: gemini)",
 )
 @click.option("--model", "-m", default=None, help="Model to use (defaults per provider)")
 @click.option(
@@ -525,19 +532,22 @@ def generate_image(prompt, output, blog, style, output_opt, provider, model, siz
     Examples:
       omelet generate-image "A futuristic city" city.png
       omelet generate-image --blog "Binary Search Trees" -o bst/featured.png
-      omelet generate-image -p gemini --blog "Python Tips" --style tech -o py/feat.png
+      omelet generate-image --blog "YOLO26" --style constructivism -o yolo/featured.png
+      omelet generate-image -p openai --blog "Python Tips" --style tech -o py/feat.png
 
     \b
     Providers:
-      openai  - gpt-image-2 (default)
-      gemini  - gemini-3-pro-image-preview
+      gemini  - gemini-3-pro-image-preview (default)
+      openai  - gpt-image-2
 
     \b
     Styles:
-      minimal   - Clean white background, simple line art (default)
-      academic  - Black & white textbook diagrams
-      tech      - Dark gradient with neon elements
-      colorful  - Vibrant gradients, bold colors
+      minimal            - Clean white background, simple line art (default)
+      academic           - Black & white textbook diagrams
+      tech               - Dark gradient with neon elements
+      colorful           - Vibrant gradients, bold colors
+      constructivism     - Russian Constructivism poster (red/black/cream, El Lissitzky)
+      socialist-realism  - Soviet Socialist Realism poster (heroic figure, painterly)
     """
     output_path = output_opt or output
 
