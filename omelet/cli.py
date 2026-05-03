@@ -610,6 +610,160 @@ def generate_image(prompt, output, blog, style, output_opt, provider, model, siz
 cli.add_command(generate_image, "genimg")
 
 
+# ============================================================================
+# Ghost CMS admin (bulk operations)
+# ============================================================================
+
+@cli.group()
+def ghost():
+    """Ghost CMS admin operations (bulk noindex, tag cleanup, AI scan)."""
+    pass
+
+
+def _ghost_admin():
+    """Build a GhostAdmin client from Config."""
+    from .ghost_admin import GhostAdmin
+    config = Config()
+    if not config.ghost_api_url or not config.ghost_admin_api_key:
+        click.echo("Error: Ghost API not configured.", err=True)
+        click.echo("Add 'ghost_api_url' and 'ghost_admin_api_key' to ~/.omelet.json", err=True)
+        raise click.Abort()
+    return GhostAdmin(config.ghost_api_url, config.ghost_admin_api_key)
+
+
+@ghost.command()
+@click.argument("slug")
+@click.option("--undo", is_flag=True, help="Remove noindex instead of adding")
+def noindex(slug, undo):
+    """Add (or --undo remove) noindex meta on post or page by slug."""
+    from .ghost_admin import add_noindex
+    admin = _ghost_admin()
+    status, msg = add_noindex(admin, slug, undo=undo)
+    color = {'OK': 'green', 'SKIP': 'yellow', 'NOT_FOUND': 'red', 'FAIL': 'red'}.get(status, 'white')
+    click.echo(click.style(f'{status}: {msg}', fg=color))
+
+
+@ghost.command()
+@click.argument("slug")
+def unpublish(slug):
+    """Set post or page to draft status by slug."""
+    from .ghost_admin import set_status
+    admin = _ghost_admin()
+    status, msg = set_status(admin, slug, 'draft')
+    color = {'OK': 'green', 'SKIP': 'yellow', 'NOT_FOUND': 'red', 'FAIL': 'red'}.get(status, 'white')
+    click.echo(click.style(f'{status}: {msg}', fg=color))
+
+
+@ghost.command()
+@click.argument("slug")
+def publish_again(slug):
+    """Republish a draft post or page by slug."""
+    from .ghost_admin import set_status
+    admin = _ghost_admin()
+    status, msg = set_status(admin, slug, 'published')
+    color = {'OK': 'green', 'SKIP': 'yellow', 'NOT_FOUND': 'red', 'FAIL': 'red'}.get(status, 'white')
+    click.echo(click.style(f'{status}: {msg}', fg=color))
+
+
+@ghost.command("cleanup-tags")
+@click.option(
+    "--strategy",
+    type=click.Choice(["safe", "aggressive"]),
+    default="safe",
+    help="safe = delete orphans only. aggressive = also set thin tags to internal.",
+)
+@click.option("--threshold", default=2, type=int,
+              help="Tags with <threshold posts are 'thin'. Default 2 (i.e. 1-post tags).")
+@click.option("--dry-run", is_flag=True, help="Show counts only, don't apply.")
+def cleanup_tags(strategy, threshold, dry_run):
+    """Cleanup tag pollution: delete orphans, optionally internalize thin tags."""
+    from .ghost_admin import cleanup_tags as do_cleanup
+    admin = _ghost_admin()
+    summary = do_cleanup(admin, strategy=strategy, threshold=threshold, dry_run=True)
+    click.echo(f'Total tags: {summary["total_tags"]}')
+    click.echo(f'Orphans (will DELETE): {summary["orphans"]}')
+    if strategy == 'aggressive':
+        click.echo(f'Thin tags <{threshold} posts (will INTERNALIZE): {summary["thin"]}')
+
+    if dry_run:
+        click.echo('--dry-run: stopping here.')
+        return
+    if not click.confirm('Apply?', default=False):
+        click.echo('Aborted.')
+        return
+
+    summary = do_cleanup(admin, strategy=strategy, threshold=threshold, dry_run=False)
+    click.echo(click.style(f'Deleted: {summary["deleted"]} orphans', fg='green'))
+    if strategy == 'aggressive':
+        click.echo(click.style(f'Internalized: {summary["internalized"]} thin tags', fg='green'))
+    if summary['errors']:
+        click.echo(click.style(f'Errors: {len(summary["errors"])}', fg='red'))
+        for e in summary['errors'][:5]:
+            click.echo(f'  - {e}')
+
+
+@ghost.command("scan-ai-endings")
+@click.option("--fix", is_flag=True, help="Auto-remove confirmed AI endings (with confirmation).")
+@click.option("--include-drafts", is_flag=True, help="Also scan draft posts.")
+def scan_ai_endings(fix, include_drafts):
+    """Scan posts for AI-template closings (Tóm lại / Hy vọng / Chúc vui vẻ / Kết luận)."""
+    from .ghost_admin import find_ai_endings, remove_ai_ending
+    admin = _ghost_admin()
+    candidates = find_ai_endings(admin, include_drafts=include_drafts)
+    click.echo(f'Found {len(candidates)} posts with AI ending\n')
+    for c in candidates:
+        click.echo(click.style(f'  [{c["ending_kind"]}] {c["slug"]}', bold=True))
+        preview = c['last_para'][:150].replace('\n', ' ')
+        click.echo(f'    {preview}{"..." if len(c["last_para"]) > 150 else ""}\n')
+
+    if not fix or not candidates:
+        return
+    if not click.confirm(f'Remove AI ending from {len(candidates)} posts?', default=False):
+        click.echo('Aborted.')
+        return
+
+    ok = fail = skip = 0
+    for c in candidates:
+        status, msg = remove_ai_ending(admin, c)
+        if status == 'OK':
+            ok += 1
+            click.echo(click.style(f'  OK: {msg}', fg='green'))
+        elif status == 'SKIP':
+            skip += 1
+            click.echo(click.style(f'  SKIP {c["slug"]}: {msg}', fg='yellow'))
+        else:
+            fail += 1
+            click.echo(click.style(f'  FAIL {c["slug"]}: {msg}', fg='red'))
+    click.echo(f'\nDone. OK={ok}, SKIP={skip}, FAIL={fail}')
+
+
+# ============================================================================
+# SEO audit
+# ============================================================================
+
+@cli.group()
+def seo():
+    """SEO audit and recovery tools."""
+    pass
+
+
+@seo.command()
+@click.option("--ga4-csv", type=click.Path(exists=True),
+              help="GA4 'Queries' export CSV for click/impression analysis.")
+@click.option("--out", "-o", default="seo-audit.md", type=click.Path(),
+              help="Output markdown report path.")
+@click.option("--site-url", default="https://www.omelet.tech",
+              help="Public site URL (for sitemap fetch).")
+def audit(ga4_csv, out, site_url):
+    """Run full SEO health audit and write a markdown report."""
+    from .seo import build_audit_report
+    admin = _ghost_admin()
+    click.echo("Building audit report...")
+    report = build_audit_report(admin, base_url=site_url, ga4_csv=ga4_csv)
+    Path(out).write_text(report, encoding='utf-8')
+    click.echo(click.style(f'Report saved: {out}', fg='green'))
+
+
 def main():
     """Entry point for the CLI"""
     cli()
