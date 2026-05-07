@@ -11,7 +11,7 @@ class MarkdownProcessor:
     """Processor for markdown files"""
     
     def __init__(self):
-        self.image_pattern = r'!\[([^\]]*)\]\(([^)]+)\)'
+        self.image_pattern = r'!\[(.*?)\]\(([^)]+)\)'
     
     def find_local_images(self, content: str, markdown_path: Path) -> List[Dict[str, Any]]:
         """
@@ -86,7 +86,7 @@ class MarkdownProcessor:
         for original_path, public_url in sorted_mappings:
             # Use regex to find and replace the image path in markdown syntax
             # This pattern matches ![alt text](original_path)
-            pattern = r'(\!\[[^\]]*\]\()' + re.escape(original_path) + r'(\))'
+            pattern = r'(\!\[.*?\]\()' + re.escape(original_path) + r'(\))'
             replacement = r'\1' + public_url + r'\2'
             content = re.sub(pattern, replacement, content)
         
