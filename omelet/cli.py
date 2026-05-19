@@ -737,6 +737,157 @@ def scan_ai_endings(fix, include_drafts):
     click.echo(f'\nDone. OK={ok}, SKIP={skip}, FAIL={fail}')
 
 
+@ghost.command("set-seo")
+@click.argument("identifier")
+@click.option("--title", "-t", help="Post title (also used as meta_title default).")
+@click.option("--slug", help="URL slug.")
+@click.option("--description", "-d", "meta_description",
+              help="Meta description (~140-160 chars).")
+@click.option("--excerpt", "custom_excerpt", help="Ghost custom_excerpt.")
+@click.option("--excerpt-from-meta", is_flag=True,
+              help="Use --description as custom_excerpt if --excerpt not given.")
+@click.option("--feature-image", help="Public URL of feature image.")
+@click.option("--feature-image-alt", help="Alt text for feature image.")
+@click.option("--meta-title", help="SEO title override (default: --title).")
+@click.option("--tags", help="Comma-separated tag names (replaces existing).")
+@click.option("--og-title")
+@click.option("--og-description")
+@click.option("--og-image")
+@click.option("--twitter-title")
+@click.option("--twitter-description")
+@click.option("--twitter-image")
+@click.option("--og-mirror", is_flag=True,
+              help="Auto-fill og_*/twitter_* from title + description + feature_image.")
+@click.option("--from-frontmatter", type=click.Path(exists=True, path_type=Path),
+              help="Read missing fields from markdown YAML frontmatter (title, slug, description, tags, feature_image).")
+@click.option("--show", is_flag=True, help="Print current SEO fields and exit.")
+def set_seo_cmd(identifier, show, from_frontmatter, og_mirror, excerpt_from_meta, tags, **kwargs):
+    """Set SEO metadata on a Ghost post/page (title, meta, OG, Twitter, tags, feature image) in one PUT.
+
+    IDENTIFIER is either a 24-hex post id or a slug.
+    """
+    from .ghost_admin import set_seo, show_seo, _parse_frontmatter
+
+    admin = _ghost_admin()
+
+    if show:
+        current = show_seo(admin, identifier)
+        if current is None:
+            click.echo(click.style(f'NOT_FOUND: no post/page with id/slug {identifier!r}', fg='red'))
+            raise click.Abort()
+        click.echo(click.style(f'Status: {current.pop("_status")}', bold=True))
+        click.echo(f'URL:    {current.pop("_url")}')
+        for k, v in current.items():
+            if v in (None, '', []):
+                continue
+            preview = str(v)
+            if len(preview) > 100:
+                preview = preview[:97] + '...'
+            click.echo(f'  {k:25s} = {preview}')
+        return
+
+    fields = {k: v for k, v in kwargs.items() if v is not None}
+    tag_list = [t.strip() for t in tags.split(',')] if tags else None
+
+    # Merge in frontmatter (only fills missing keys, doesn't override CLI args)
+    if from_frontmatter:
+        fm = _parse_frontmatter(from_frontmatter)
+        fm_map = {
+            'title': 'title',
+            'slug': 'slug',
+            'description': 'meta_description',
+            'meta_description': 'meta_description',
+            'excerpt': 'custom_excerpt',
+            'feature_image': 'feature_image',
+            'feature_image_alt': 'feature_image_alt',
+        }
+        for fm_key, field_key in fm_map.items():
+            if field_key not in fields and fm.get(fm_key):
+                fields[field_key] = fm[fm_key]
+        if tag_list is None and fm.get('tags'):
+            fm_tags = fm['tags']
+            tag_list = fm_tags if isinstance(fm_tags, list) else [t.strip() for t in str(fm_tags).split(',')]
+
+    # If --title given but no --meta-title, default meta_title to title (Ghost convention)
+    if fields.get('title') and not fields.get('meta_title'):
+        fields['meta_title'] = fields['title']
+
+    if not fields and not tag_list:
+        click.echo('No fields provided. Use --show to inspect, or pass field options.', err=True)
+        raise click.Abort()
+
+    status, msg, applied = set_seo(
+        admin, identifier,
+        fields=fields,
+        tags=tag_list,
+        og_mirror=og_mirror,
+        excerpt_from_meta=excerpt_from_meta,
+    )
+    color = {'OK': 'green', 'SKIP': 'yellow', 'NOT_FOUND': 'red', 'FAIL': 'red'}.get(status, 'white')
+    click.echo(click.style(f'{status}: {msg}', fg=color))
+    if status == 'OK':
+        for k, v in applied.items():
+            preview = str(v)
+            if len(preview) > 100:
+                preview = preview[:97] + '...'
+            click.echo(f'  {k:25s} = {preview}')
+
+
+@ghost.command("migrate-images")
+@click.argument("identifier")
+@click.option("--source-base", help="Base URL to resolve relative img src (e.g. https://kimi.page/).")
+@click.option("--folder", help="GCS subfolder under public/blog/ (default: post slug).")
+@click.option("--mirror-external", is_flag=True,
+              help="Also mirror absolute external URLs (not just relative paths).")
+@click.option("--bucket", help="Override gcs_bucket from ~/.omelet.json.")
+@click.option("--strip-watermark", is_flag=True,
+              help="Run scrub_watermark in addition to strip_image_metadata.")
+@click.option("--dry-run", is_flag=True, help="Show what would migrate, don't apply.")
+def migrate_images_cmd(identifier, source_base, folder, mirror_external, bucket, strip_watermark, dry_run):
+    """Download all <img> in a post, strip metadata, upload to GCS, replace src.
+
+    IDENTIFIER is either a 24-hex post id or a slug.
+
+    Examples:
+      omelet ghost migrate-images my-post-slug --source-base https://kimi.page/
+      omelet ghost migrate-images 6a0bad59... --mirror-external --dry-run
+    """
+    from .ghost_admin import migrate_images
+    admin = _ghost_admin()
+    result = migrate_images(
+        admin, identifier,
+        source_base=source_base,
+        folder=folder,
+        mirror_external=mirror_external,
+        bucket=bucket,
+        strip_watermark=strip_watermark,
+        dry_run=dry_run,
+    )
+
+    status = result.get('status', 'UNKNOWN')
+    color = {'OK': 'green', 'DRY_RUN': 'cyan', 'NOOP': 'yellow',
+             'NOT_FOUND': 'red', 'FAIL': 'red'}.get(status, 'white')
+    click.echo(click.style(f'\n{status}: post={result.get("post_slug", "?")}', fg=color, bold=True))
+
+    if status in ('NOT_FOUND', 'FAIL'):
+        click.echo(click.style(f'  error: {result.get("error", "?")}', fg='red'))
+        raise click.Abort()
+
+    if status == 'DRY_RUN':
+        for src, url in result.get('would_migrate', []):
+            click.echo(f'  WOULD: {src}')
+            click.echo(f'         ← {url}')
+    else:
+        for old, new in result.get('mapping', {}).items():
+            click.echo(click.style(f'  ✓ {old}', fg='green'))
+            click.echo(f'    → {new}')
+
+    for src, reason in result.get('skipped', []) or []:
+        click.echo(click.style(f'  SKIP: {src}  ({reason})', fg='yellow'))
+    for src, err in result.get('errors', []) or []:
+        click.echo(click.style(f'  FAIL: {src}  ({err})', fg='red'))
+
+
 # ============================================================================
 # SEO audit
 # ============================================================================
