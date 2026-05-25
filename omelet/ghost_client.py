@@ -94,7 +94,59 @@ def markdown_to_html(md_content: str) -> str:
             FencedCodeExtension(),
             'sane_lists',
             'attr_list',
+            'footnotes',
         ]
+    )
+    html = _rewrite_footnotes_for_ghost(html)
+    return html
+
+
+def _rewrite_footnotes_for_ghost(html: str) -> str:
+    """Rewrite Python-markdown footnote output so Ghost preserves anchor jumps.
+
+    Ghost's sanitizer strips `id` attributes from every element except headings
+    (h1-h6), so the default footnote markup (`<sup id="fnref:N">` and
+    `<li id="fn:N">`) loses both ends of the citation link. We work around that
+    by turning each reference into an `<h6>[N]</h6>` (Ghost auto-slugs `[N]` to
+    id `N`) and pointing inline citations at `#N`. Back-links are dropped since
+    `<sup>` can not hold an id either.
+    """
+    if 'class="footnote"' not in html and 'class="footnote-ref"' not in html:
+        return html
+
+    # Inline: <sup id="fnref[N]:K"><a class="footnote-ref" href="#fn:K">K</a></sup>
+    # -> <a href="#K"><sup>[K]</sup></a>
+    html = re.sub(
+        r'<sup id="fnref\d*:(\d+)"><a class="footnote-ref" href="#fn:\1">\1</a></sup>',
+        r'<a href="#\1"><sup>[\1]</sup></a>',
+        html,
+    )
+
+    # Reference block: <div class="footnote"><hr />?<ol>...</ol></div>
+    # Each <li id="fn:N"><p>CONTENT (trailing &#160;<a class="footnote-backref">↩</a>...)</p></li>
+    # -> <h6>[N]</h6><p>CONTENT</p>
+    backref_pat = re.compile(
+        r'(?:&#160;|\s)*(?:<a class="footnote-backref"[^>]*>&#8617;</a>\s*)+'
+    )
+
+    def render_block(m):
+        body = m.group(1)
+        items = re.findall(
+            r'<li id="fn:(\d+)">\s*<p>(.*?)</p>\s*</li>',
+            body,
+            flags=re.DOTALL,
+        )
+        chunks = []
+        for n, content in items:
+            content = backref_pat.sub('', content).strip()
+            chunks.append(f'<h6>[{n}]</h6>\n<p>{content}</p>')
+        return '\n'.join(chunks)
+
+    html = re.sub(
+        r'<div class="footnote">\s*(?:<hr\s*/?>)?\s*<ol>(.*?)</ol>\s*</div>',
+        render_block,
+        html,
+        flags=re.DOTALL,
     )
     return html
 
