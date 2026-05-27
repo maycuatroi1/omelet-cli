@@ -148,20 +148,61 @@ def buildmarkdown(file, folder, no_plantuml):
         raise click.Abort()
 
 
+class _GhostFallbackUploader:
+    """Fallback uploader that pushes images straight to Ghost's native image API.
+
+    Used as last-resort when neither GCS nor a configured backend_url is available,
+    so a `publish` invocation never silently leaves local image paths in the post body.
+    """
+
+    def __init__(self, ghost_client):
+        self._ghost = ghost_client
+
+    def upload_image(self, image_path: Path, folder: str) -> str:  # noqa: ARG002 - folder ignored by Ghost
+        return self._ghost.upload_image(str(image_path))
+
+
+def _pick_uploader(config: Config):
+    """Return (uploader, label) using a fallback chain so we never silently skip upload.
+
+    Priority:
+      1. GCS (when ``use_gcs=True`` AND gcloud auth works)
+      2. ImageUploader (when ``backend_url`` is configured)
+      3. Ghost native image API (always available once Ghost credentials are set)
+
+    Returns ``(None, None)`` only if no uploader is usable, in which case the caller
+    should abort rather than proceed with local paths in the body.
+    """
+    if config.use_gcs:
+        auth = GCloudAuth()
+        if auth.is_authenticated():
+            return GCSUploader(config.gcs_bucket, auth), f"Google Cloud Storage (bucket: {config.gcs_bucket})"
+        click.echo(
+            "⚠ GCS configured but gcloud auth missing - run `gcloud auth application-default login`. "
+            "Falling back to next available uploader.",
+            err=True,
+        )
+
+    if getattr(config, "backend_url", None):
+        return ImageUploader(config), f"ImageUploader backend ({config.backend_url})"
+
+    if config.ghost_api_url and config.ghost_admin_api_key:
+        from .ghost_client import GhostClient
+
+        ghost = GhostClient(config.ghost_api_url, config.ghost_admin_api_key)
+        return _GhostFallbackUploader(ghost), "Ghost native image storage (fallback)"
+
+    return None, None
+
+
 def process_markdown_images(file_path: Path, config: Config, processor: MarkdownProcessor, skip_plantuml: bool = False, scrub: bool = False):
     """Process PlantUML blocks and upload local images, return updated content."""
     content = file_path.read_text(encoding="utf-8")
     folder = file_path.parent.name
 
-    # Choose uploader based on configuration
-    uploader = None
-    if config.use_gcs:
-        auth = GCloudAuth()
-        if auth.is_authenticated():
-            uploader = GCSUploader(config.gcs_bucket, auth)
-            click.echo(f"Using Google Cloud Storage (bucket: {config.gcs_bucket})")
-    else:
-        uploader = ImageUploader(config)
+    uploader, uploader_label = _pick_uploader(config)
+    if uploader is not None:
+        click.echo(f"Using {uploader_label}")
 
     # Process PlantUML blocks first
     if not skip_plantuml:
@@ -189,24 +230,34 @@ def process_markdown_images(file_path: Path, config: Config, processor: Markdown
     # Re-read content after PlantUML processing
     content = file_path.read_text(encoding="utf-8")
 
-    # Find and upload local images
-    if uploader:
-        images = processor.find_local_images(content, file_path)
-        if images:
-            click.echo(f"Found {len(images)} local image(s) to upload")
-            for image_info in images:
-                try:
-                    if scrub and scrub_image(image_info["path"]):
-                        click.echo(f"✓ Scrubbed watermark: {image_info['path'].name}")
-                    if strip_image_metadata(image_info["path"]):
-                        click.echo(f"✓ Stripped metadata: {image_info['path'].name}")
-                    public_url = uploader.upload_image(image_info["path"], folder)
-                    click.echo(f"✓ Uploaded: {image_info['path'].name}")
-                    url_mapping = {image_info["original"]: public_url}
-                    content = processor.replace_urls(content, url_mapping)
-                    file_path.write_text(content, encoding="utf-8")
-                except Exception as e:
-                    click.echo(f"✗ Failed to upload {image_info['path'].name}: {str(e)}", err=True)
+    images = processor.find_local_images(content, file_path)
+
+    # Fail loud when there are images to upload but no uploader is available.
+    # Silent skipping here used to produce Ghost drafts with broken `./foo.png` paths.
+    if images and uploader is None:
+        click.echo(
+            f"✗ Found {len(images)} local image(s) but no uploader is configured. "
+            "Configure one of: GCS auth (`gcloud auth application-default login`), "
+            "`backend_url` in ~/.omelet.json, or Ghost admin credentials.",
+            err=True,
+        )
+        raise click.Abort()
+
+    if uploader and images:
+        click.echo(f"Found {len(images)} local image(s) to upload")
+        for image_info in images:
+            try:
+                if scrub and scrub_image(image_info["path"]):
+                    click.echo(f"✓ Scrubbed watermark: {image_info['path'].name}")
+                if strip_image_metadata(image_info["path"]):
+                    click.echo(f"✓ Stripped metadata: {image_info['path'].name}")
+                public_url = uploader.upload_image(image_info["path"], folder)
+                click.echo(f"✓ Uploaded: {image_info['path'].name}")
+                url_mapping = {image_info["original"]: public_url}
+                content = processor.replace_urls(content, url_mapping)
+                file_path.write_text(content, encoding="utf-8")
+            except Exception as e:
+                click.echo(f"✗ Failed to upload {image_info['path'].name}: {str(e)}", err=True)
 
     return content
 
@@ -249,6 +300,23 @@ def publish(file, no_plantuml, no_images, featured_image, scrub_watermark):
         # Step 1: Process images (PlantUML + upload)
         if not no_images:
             process_markdown_images(file_path, config, processor, skip_plantuml=no_plantuml, scrub=scrub_watermark)
+
+        # Safety net: refuse to push a post that still contains local image paths.
+        # Without this, an upload failure (or misconfiguration that slips past step 1)
+        # would publish a broken Ghost draft with `./image.png` references.
+        post_image_content = file_path.read_text(encoding="utf-8")
+        leftover_images = processor.find_local_images(post_image_content, file_path)
+        if leftover_images:
+            click.echo(
+                f"✗ Refusing to publish: {len(leftover_images)} local image path(s) still in body:",
+                err=True,
+            )
+            for img in leftover_images[:5]:
+                click.echo(f"    - {img['original']}", err=True)
+            if len(leftover_images) > 5:
+                click.echo(f"    ... and {len(leftover_images) - 5} more", err=True)
+            click.echo("Fix the uploader configuration above and re-run.", err=True)
+            raise click.Abort()
 
         # Step 2: Publish to Ghost
         from .ghost_client import GhostClient
