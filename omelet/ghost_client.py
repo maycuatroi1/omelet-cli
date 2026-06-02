@@ -265,12 +265,20 @@ class GhostClient:
         return self.update_post(post_id, updates)
 
     def publish_markdown(self, markdown_path: str, slug: str = None) -> dict:
-        """Create a new Ghost post from markdown file."""
-        with open(markdown_path, 'r', encoding='utf-8') as f:
+        """Create a new Ghost post from a .md or .mdx file."""
+        path = Path(markdown_path)
+        with open(path, 'r', encoding='utf-8') as f:
             content = f.read()
 
-        frontmatter, body = parse_frontmatter(content)
-        html_content = markdown_to_html(body)
+        if path.suffix.lower() == ".mdx":
+            from .mdx.compiler import compile_mdx_path
+            from .mdx.sanitize import sanitize
+            result = compile_mdx_path(path)
+            frontmatter = result.frontmatter
+            html_content = sanitize(result.html)
+        else:
+            frontmatter, body = parse_frontmatter(content)
+            html_content = markdown_to_html(body)
 
         tags = frontmatter.get('tags', frontmatter.get('keywords', []))
         if isinstance(tags, str):

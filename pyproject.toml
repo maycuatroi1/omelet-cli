@@ -38,6 +38,9 @@ dependencies = [
     "google-genai>=1.0.0",
     "opencv-python-headless>=4.0.0",
     "openai>=1.0.0",
+    "mistune>=3.0",
+    "pyyaml>=6.0",
+    "bleach>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -62,12 +65,14 @@ Repository = "https://github.com/omelet-tech/omelet-cli"
 
 [project.scripts]
 omelet = "omelet.cli:main"
+omelet-mdx = "omelet.mdx.cli:main"
 
 [tool.setuptools]
-packages = ["omelet"]
+packages = ["omelet", "omelet.mdx", "omelet.mdx.components", "omelet.preview"]
 
 [tool.setuptools.package-data]
 omelet = ["py.typed"]
+"omelet.preview" = ["static/*.css"]
 
 [tool.black]
 line-length = 88

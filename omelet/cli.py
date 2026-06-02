@@ -272,8 +272,8 @@ def publish(file, no_plantuml, no_images, featured_image, scrub_watermark):
     """Build and publish a markdown file to Ghost CMS"""
     file_path = Path(file)
 
-    if not file_path.suffix.lower() == ".md":
-        click.echo(f"Error: {file} is not a markdown file", err=True)
+    if file_path.suffix.lower() not in (".md", ".mdx"):
+        click.echo(f"Error: {file} is not a .md or .mdx file", err=True)
         raise click.Abort()
 
     config = Config()
@@ -981,6 +981,44 @@ def audit(ga4_csv, out, site_url):
     report = build_audit_report(admin, base_url=site_url, ga4_csv=ga4_csv)
     Path(out).write_text(report, encoding='utf-8')
     click.echo(click.style(f'Report saved: {out}', fg='green'))
+
+
+@cli.command()
+@click.argument("file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--port", "-p", default=4321, type=int, help="Port (auto-pick next free if busy)")
+@click.option("--host", "-h", default="0.0.0.0", help="Bind host (0.0.0.0 = accept from any IP)")
+@click.option(
+    "--theme",
+    "-t",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to Ghost theme screen.css for WYSIWYG preview",
+)
+@click.option("--no-browser", is_flag=True, help="Do not auto-open browser")
+@click.option("--no-watch-components", is_flag=True, help="Do not watch omelet/mdx/components/*.py")
+def preview(file: Path, port: int, host: str, theme, no_browser: bool, no_watch_components: bool):
+    """Live preview a .mdx or .md file in the browser with hot reload."""
+    from .preview import start_server
+
+    theme_path = theme
+    if theme_path is None:
+        candidates = [
+            Path.home() / "git" / "omelet.tech-template" / "assets" / "built" / "screen.css",
+            Path.home() / "git" / "omelet.tech-template" / "assets" / "css" / "screen.css",
+        ]
+        for c in candidates:
+            if c.exists():
+                theme_path = c
+                break
+
+    start_server(
+        file_path=file,
+        host=host,
+        port=port,
+        theme_css_path=theme_path,
+        open_browser=not no_browser,
+        watch_components=not no_watch_components,
+    )
 
 
 def main():
