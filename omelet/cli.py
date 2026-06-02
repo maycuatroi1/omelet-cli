@@ -834,7 +834,7 @@ def set_seo_cmd(identifier, show, from_frontmatter, og_mirror, excerpt_from_meta
 
     IDENTIFIER is either a 24-hex post id or a slug.
     """
-    from .ghost_admin import set_seo, show_seo, _parse_frontmatter
+    from .ghost_admin import set_seo, show_seo, parse_frontmatter
 
     admin = _ghost_admin()
 
@@ -859,7 +859,7 @@ def set_seo_cmd(identifier, show, from_frontmatter, og_mirror, excerpt_from_meta
 
     # Merge in frontmatter (only fills missing keys, doesn't override CLI args)
     if from_frontmatter:
-        fm = _parse_frontmatter(from_frontmatter)
+        fm = parse_frontmatter(from_frontmatter)
         fm_map = {
             'title': 'title',
             'slug': 'slug',
