@@ -119,7 +119,7 @@ def _parse_math_block(block, m, state):
 def math_block_plugin(md: mistune.Markdown) -> None:
     md.block.register(
         "math_block",
-        r"^\$\$[^\S\n]*\n(?P<math_block_content>[\s\S]+?)\n\$\$[^\S\n]*$",
+        r"^\$\$[^\S\n]*\n?(?P<math_block_content>[\s\S]+?)\n?\$\$[^\S\n]*$",
         _parse_math_block,
         before="paragraph",
     )
