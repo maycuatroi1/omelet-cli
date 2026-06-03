@@ -264,8 +264,8 @@ class GhostClient:
 
         return self.update_post(post_id, updates)
 
-    def publish_markdown(self, markdown_path: str, slug: str = None) -> dict:
-        """Create a new Ghost post from a .md or .mdx file."""
+    def _compile_markdown(self, markdown_path: str) -> tuple[dict, str, list]:
+        """Compile a .md/.mdx file to (frontmatter, html, tags). Shared by publish + update."""
         path = Path(markdown_path)
         with open(path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -289,9 +289,15 @@ class GhostClient:
             else:
                 tags = []
 
+        return frontmatter, html_content, tags
+
+    def publish_markdown(self, markdown_path: str, slug: str = None) -> dict:
+        """Create a new Ghost post from a .md or .mdx file."""
+        frontmatter, html_content, tags = self._compile_markdown(markdown_path)
+
         if slug is None:
             slug = Path(markdown_path).parent.name
-            if slug == '.':
+            if slug in ('.', ''):
                 slug = None
 
         post = self.create_post(
@@ -306,3 +312,29 @@ class GhostClient:
         )
 
         return post
+
+    def update_markdown(self, markdown_path: str, post_id: str, slug: str = None) -> dict:
+        """Update an existing Ghost post in place from a .md or .mdx file.
+
+        Recompiles title, html, tags, excerpt and meta fields and PUTs them to
+        the existing post, preserving its status (draft stays draft). Slug is left
+        untouched unless `slug` is passed explicitly. Feature image from frontmatter
+        `image:` is applied if present; a local featured image is handled separately
+        by the caller via set_featured_image.
+        """
+        frontmatter, html_content, tags = self._compile_markdown(markdown_path)
+
+        updates = {
+            'title': frontmatter.get('title', 'Untitled'),
+            'html': html_content,
+            'tags': [{'name': tag} for tag in tags],
+            'custom_excerpt': frontmatter.get('description', ''),
+            'meta_title': frontmatter.get('title', ''),
+            'meta_description': frontmatter.get('description', ''),
+        }
+        if frontmatter.get('image'):
+            updates['feature_image'] = frontmatter['image']
+        if slug:
+            updates['slug'] = slug
+
+        return self.update_post(post_id, updates)

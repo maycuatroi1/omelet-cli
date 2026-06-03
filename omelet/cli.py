@@ -347,6 +347,115 @@ def publish(file, no_plantuml, no_images, featured_image, scrub_watermark):
 
 
 @cli.command()
+@click.argument("file", type=click.Path(exists=True))
+@click.option("--id", "post_id", help="Ghost post id to update.")
+@click.option("--slug", "slug", help="Find the post to update by this slug (instead of id).")
+@click.option("--set-slug", "set_slug", help="Change the post's slug to this value while updating.")
+@click.option("--no-plantuml", is_flag=True, help="Skip PlantUML processing")
+@click.option("--no-images", is_flag=True, help="Skip image processing")
+@click.option("--featured-image", "-i", type=click.Path(exists=True), help="Featured image path")
+@click.option("--scrub-watermark", is_flag=True, help="Disrupt SynthID/AI watermark before upload")
+@click.option("--create-if-missing", is_flag=True, help="Create a new post if none matches the target.")
+def update(file, post_id, slug, set_slug, no_plantuml, no_images, featured_image, scrub_watermark, create_if_missing):
+    """Update an EXISTING Ghost post in place from a .md/.mdx file (no new draft).
+
+    Resolve the target by --id, --slug, or (default) the file's parent folder name.
+    Unlike `publish`, this never creates a duplicate: it PUTs the recompiled body,
+    title, tags and meta onto the post that already exists, preserving its status.
+    """
+    file_path = Path(file)
+
+    if file_path.suffix.lower() not in (".md", ".mdx"):
+        click.echo(f"Error: {file} is not a .md or .mdx file", err=True)
+        raise click.Abort()
+
+    config = Config()
+    if not config.ghost_api_url or not config.ghost_admin_api_key:
+        click.echo("Error: Ghost API not configured.", err=True)
+        click.echo("Add 'ghost_api_url' and 'ghost_admin_api_key' to ~/.omelet.json", err=True)
+        raise click.Abort()
+
+    identifier = post_id or slug or file_path.resolve().parent.name
+
+    try:
+        from .ghost_admin import GhostAdmin
+        from .ghost_client import GhostClient
+
+        admin = GhostAdmin(config.ghost_api_url, config.ghost_admin_api_key)
+        found = admin.find(identifier)
+
+        if not found:
+            if create_if_missing:
+                click.echo(f"No post matched {identifier!r}; creating a new one instead.")
+                ctx = click.get_current_context()
+                ctx.invoke(
+                    publish, file=file, no_plantuml=no_plantuml, no_images=no_images,
+                    featured_image=featured_image, scrub_watermark=scrub_watermark,
+                )
+                return
+            click.echo(f"Error: no post or page matched id/slug {identifier!r}.", err=True)
+            click.echo("Pass --id or --slug, or use --create-if-missing.", err=True)
+            raise click.Abort()
+
+        obj, kind = found
+        if kind != "posts":
+            click.echo(f"Error: {identifier!r} is a {kind[:-1]}, not a post.", err=True)
+            raise click.Abort()
+
+        click.echo(f"Updating: {obj['title']} ({obj['slug']}, status={obj['status']})")
+
+        processor = MarkdownProcessor()
+        with open(file_path, "r", encoding="utf-8") as f:
+            original = f.read()
+        normalized = processor.normalize_punctuation(original)
+        if normalized != original:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(normalized)
+            click.echo("✓ Normalized punctuation (em-dash → hyphen, removed body `---` dividers)")
+
+        if not no_images:
+            process_markdown_images(file_path, config, processor, skip_plantuml=no_plantuml, scrub=scrub_watermark)
+
+        post_image_content = file_path.read_text(encoding="utf-8")
+        leftover_images = processor.find_local_images(post_image_content, file_path)
+        if leftover_images:
+            click.echo(
+                f"✗ Refusing to update: {len(leftover_images)} local image path(s) still in body:",
+                err=True,
+            )
+            for img in leftover_images[:5]:
+                click.echo(f"    - {img['original']}", err=True)
+            click.echo("Fix the uploader configuration above and re-run.", err=True)
+            raise click.Abort()
+
+        click.echo("Updating post on Ghost CMS...")
+        ghost = GhostClient(config.ghost_api_url, config.ghost_admin_api_key)
+        post = ghost.update_markdown(str(file_path), obj["id"], slug=set_slug)
+
+        click.echo(click.style(f"✓ Updated post: {post['title']}", fg="green"))
+        click.echo(f"  ID: {post['id']}")
+        click.echo(f"  Slug: {post['slug']}")
+
+        if featured_image:
+            if scrub_watermark and scrub_image(featured_image):
+                click.echo(f"✓ Scrubbed watermark: {Path(featured_image).name}")
+            if strip_image_metadata(featured_image):
+                click.echo(f"✓ Stripped metadata: {Path(featured_image).name}")
+            click.echo(f"Uploading featured image: {featured_image}")
+            ghost.set_featured_image(post["id"], featured_image)
+            click.echo("✓ Featured image set")
+
+        edit_url = f"{config.ghost_api_url}/ghost/#/editor/post/{post['id']}"
+        click.echo(click.style(f"\nEdit URL: {edit_url}", fg="green", bold=True))
+
+    except click.Abort:
+        raise
+    except Exception as e:
+        click.echo(f"Error: {str(e)}", err=True)
+        raise click.Abort()
+
+
+@cli.command()
 @click.option("--file", "-f", type=click.Path(exists=True), help="Path to the .puml file")
 @click.option("--string", "-s", help="PlantUML string content")
 @click.option("--output", "-o", required=True, type=click.Path(), help="Output image path (e.g., diagram.png)")
@@ -731,6 +840,28 @@ def publish_again(slug):
     status, msg = set_status(admin, slug, 'published')
     color = {'OK': 'green', 'SKIP': 'yellow', 'NOT_FOUND': 'red', 'FAIL': 'red'}.get(status, 'white')
     click.echo(click.style(f'{status}: {msg}', fg=color))
+
+
+@ghost.command("delete")
+@click.argument("identifier")
+@click.option("--yes", "-y", is_flag=True, help="Skip the confirmation prompt.")
+def ghost_delete(identifier, yes):
+    """Delete a post or page by id or slug. Use to drop duplicate drafts."""
+    admin = _ghost_admin()
+    found = admin.find(identifier)
+    if not found:
+        click.echo(click.style(f'NOT_FOUND: no post or page with id/slug {identifier!r}', fg='red'))
+        raise click.Abort()
+    obj, kind = found
+    label = f"{kind[:-1]} '{obj['title']}' (slug={obj['slug']}, status={obj['status']})"
+    if not yes:
+        click.confirm(f'Delete {label}?', abort=True)
+    r = admin.delete(kind, obj['id'])
+    if r.status_code in (200, 204):
+        click.echo(click.style(f'OK: deleted {label}', fg='green'))
+    else:
+        click.echo(click.style(f'FAIL: {r.status_code} - {r.text[:200]}', fg='red'))
+        raise click.Abort()
 
 
 @ghost.command("cleanup-tags")
