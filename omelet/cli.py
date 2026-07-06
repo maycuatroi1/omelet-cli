@@ -660,7 +660,7 @@ def aicheck(file, token, text, section, language, no_explain, raw, all_sections)
 
 PROVIDER_DEFAULT_MODEL = {
     "openai": "gpt-image-2",
-    "gemini": "gemini-3-pro-image-preview",
+    "gemini": "gemini-3-pro-image",
 }
 
 
@@ -702,7 +702,14 @@ PROVIDER_DEFAULT_MODEL = {
     type=click.Choice(["auto", "low", "medium", "high"]),
     help="Image quality for OpenAI (default: high)",
 )
-def generate_image(prompt, output, blog, style, output_opt, provider, model, size, quality):
+@click.option(
+    "--image-size",
+    "image_size",
+    default=None,
+    type=click.Choice(["1K", "2K", "4K"]),
+    help="Output resolution for Gemini Pro/Nano-Banana-2 models (default: 2K)",
+)
+def generate_image(prompt, output, blog, style, output_opt, provider, model, size, quality, image_size):
     """Generate images using OpenAI or Google Gemini.
 
     \b
@@ -714,7 +721,7 @@ def generate_image(prompt, output, blog, style, output_opt, provider, model, siz
 
     \b
     Providers:
-      gemini  - gemini-3-pro-image-preview (default)
+      gemini  - gemini-3-pro-image / Nano Banana Pro (default, up to 4K)
       openai  - gpt-image-2
 
     \b
@@ -749,7 +756,7 @@ def generate_image(prompt, output, blog, style, output_opt, provider, model, siz
             api_key = click.prompt("Google API key (GOOGLE_API_KEY)", hide_input=True)
 
         generator = GeminiImageGenerator(api_key=api_key, model=resolved_model)
-        gen_kwargs = {}
+        gen_kwargs = {"image_size": image_size}
 
     click.echo(f"Provider: {provider} ({resolved_model})")
 
@@ -764,7 +771,9 @@ def generate_image(prompt, output, blog, style, output_opt, provider, model, siz
                     blog, output_path, style, size=size, quality=quality
                 )
             else:
-                saved = generator.generate_blog_featured_image(blog, output_path, style)
+                saved = generator.generate_blog_featured_image(
+                    blog, output_path, style, image_size=image_size
+                )
             click.echo(f"Image saved: {saved}")
         except RuntimeError as e:
             click.echo(f"Error: {e}", err=True)
