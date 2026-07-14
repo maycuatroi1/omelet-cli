@@ -263,9 +263,16 @@ def bullet_heavy(doc: Doc, opt: Options):
 # DEPTH: proxies for whether the work was actually done
 # --------------------------------------------------------------------------
 
+# Một con số kèm đơn vị là một claim. "802.1X" thì không: đó là tên chuẩn IEEE, và
+# lookbehind (?<![\w.]) chặn đúng chỗ đó - nếu không, "1X" trong "802.1X" sẽ bị đọc
+# thành "1 lần". Một linter kêu oan là một linter bị tắt.
+_NUM = r"(?<![\w.,])\d+(?:[.,]\d+)?"
+_UNITS = (
+    r"%|tỷ|tỉ|triệu|nghìn|usd|đô|đồng|vnd|lần|ms|gb|mb|"
+    r"giây|phút|tiếng|điểm|người|user|request|token"
+)
 _CLAIM_NUMBER = re.compile(
-    r"\d[\d.,]*(?<![,.])\s?(%|tỷ|tỉ|triệu|nghìn|usd|đô|đồng|vnd|lần|x\b|ms\b|gb\b|mb\b|"
-    r"giây|phút|tiếng|điểm|người|user|request|token)",
+    rf"{_NUM}\s?(?:{_UNITS})\b|(?<![\w.])\d+x\b",
     re.I,
 )
 
