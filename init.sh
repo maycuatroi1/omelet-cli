@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
+# Boot omelet-cli. Chạy lại nhiều lần không sao.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-echo "==> Installing omelet-cli (editable, with dev deps)"
-python -m pip install -e ".[dev]"
+pip install -q -e ".[dev]"
+python -m pytest tests -q --no-header
 
-echo "==> Smoke test: omelet --help"
-omelet --help | head -6
-
-echo ""
-echo "Ready. Run tests with:  pytest -q   (or: make test)"
-echo "This package OWNS the cluster seams. After changing a command name, an MDX"
-echo "component (NAME= in omelet/mdx/components), or an env var, verify consumers still agree:"
-echo "  python ../blog-harness/scripts/verify_all.py"
+echo
+echo "omelet đã cài editable: code trên đĩa là code đang chạy."
+echo "Repo blog (~/blog) phụ thuộc vào những lệnh này - đừng đổi tên chúng mà không"
+echo "chạy 'python3 tools/check.py' bên đó."
+omelet --help | sed -n '/Commands:/,$p'
