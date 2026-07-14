@@ -68,7 +68,7 @@ omelet = "omelet.cli:main"
 omelet-mdx = "omelet.mdx.cli:main"
 
 [tool.setuptools]
-packages = ["omelet", "omelet.mdx", "omelet.mdx.components", "omelet.preview"]
+packages = ["omelet", "omelet.lint", "omelet.mdx", "omelet.mdx.components", "omelet.preview"]
 
 [tool.setuptools.package-data]
 omelet = ["py.typed"]

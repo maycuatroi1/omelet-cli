@@ -2,6 +2,8 @@
 Main CLI module for Omelet
 """
 
+import sys
+
 import click
 import requests
 from pathlib import Path
@@ -1159,6 +1161,56 @@ def preview(file: Path, port: int, host: str, theme, no_browser: bool, no_watch_
         open_browser=not no_browser,
         watch_components=not no_watch_components,
     )
+
+
+@cli.command()
+@click.argument("target", type=click.Path(exists=True), nargs=-1, required=True)
+@click.option("--strict", is_flag=True, help="Exit 1 khi có error (mặc định: chỉ báo cáo)")
+@click.option("--max-warn", type=int, default=None, help="Với --strict, fail luôn khi số warn vượt ngưỡng")
+@click.option("--min-citations", type=int, default=8, show_default=True,
+              help="Số citation tối thiểu cho bài dài")
+@click.option("--min-primary", type=float, default=0.5, show_default=True,
+              help="Tỉ lệ primary source tối thiểu")
+@click.option("--no-stats", is_flag=True, help="Bỏ panel độ sâu")
+@click.option("--only", help="Chỉ chạy các rule khớp prefix, vd: DEPTH hoặc SLOP-P2")
+def lint(target, strict, max_warn, min_citations, min_primary, no_stats, only):
+    """Soi bài viết: dấu hiệu AI slop + proxy độ sâu.
+
+    TARGET là file .md/.mdx hoặc folder bài viết (nhận nhiều target).
+
+    Linter chỉ thấy được thứ đếm được: cụm sáo rỗng, nhịp câu, số liệu không nguồn,
+    tỉ lệ primary source. Nó KHÔNG biết thesis của bạn có đúng không - phần đó nằm
+    ở spec.json của bài và ở người đọc lại.
+    """
+    from .lint import Options, lint_path
+    from .lint.report import print_report
+
+    opt = Options(min_citations=min_citations, min_primary_ratio=min_primary)
+
+    files = []
+    for t in target:
+        p = Path(t)
+        if p.is_dir():
+            files += sorted(p.glob("**/main.mdx")) or sorted(p.glob("**/main.md"))
+        else:
+            files.append(p)
+    if not files:
+        click.echo("Không tìm thấy file .mdx/.md nào trong target", err=True)
+        sys.exit(2)
+
+    total_err = total_warn = 0
+    for i, f in enumerate(files):
+        if len(files) > 1:
+            click.echo(click.style(f"\n=== {f} ===", bold=True))
+        doc, findings = lint_path(f, opt)
+        if only:
+            findings = [x for x in findings if x.rule.upper().startswith(only.upper())]
+        print_report(doc, findings, opt, show_stats=not no_stats)
+        total_err += sum(1 for x in findings if x.severity == "error")
+        total_warn += sum(1 for x in findings if x.severity == "warn")
+
+    if strict and (total_err or (max_warn is not None and total_warn > max_warn)):
+        sys.exit(1)
 
 
 def main():
