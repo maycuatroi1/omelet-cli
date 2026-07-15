@@ -128,7 +128,7 @@ The upload endpoint should:
 
 Some content here...
 
-![Screenshot](../assets/screenshot.jpg)
+![Screenshot](./assets/screenshot.jpg)
 ```
 
 **After:**
