@@ -5,11 +5,11 @@ generate images, and lint the writing itself.
 
 ## Who depends on this
 
-`~/blog` (the omelet.tech content repo) cannot build, preview, or publish a single post
+`~/github/blog` (the omelet.tech content repo) cannot build, preview, or publish a single post
 without this CLI. Its docs instruct agents to run `omelet preview`, `omelet publish`,
 `omelet lint`. **Renaming or removing a command breaks that repo silently.**
 
-Before changing the command surface, run `cd ~/blog && python3 tools/check.py`. It compares
+Before changing the command surface, run `cd ~/github/blog && python3 tools/check.py`. It compares
 what the blog docs tell agents to run against what `omelet --help` actually offers. It was
 written the day the two drifted apart and nobody noticed.
 
@@ -52,7 +52,7 @@ A rule that lives only in a document is a rule a future agent violates silently.
 machine-generated. `lint` asks whether the post breaks omelet.tech's own rules. Different
 questions, and the second one is the one that catches slop written by a human in a hurry.
 
-The blacklist in `rules.py` is a hand-copy of the one in `~/blog/.claude/rules/PERSONAL_VOICE.md`.
+The blacklist in `rules.py` is a hand-copy of the one in `~/github/blog/.claude/rules/PERSONAL_VOICE.md`.
 Change one, change the other. Nothing enforces this yet, and it will rot.
 
 ## Commands
