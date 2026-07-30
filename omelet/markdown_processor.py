@@ -16,10 +16,19 @@ class MarkdownProcessor:
         # markdown syntax cannot express. Those <img src> paths need uploading
         # too, or publish leaves them pointing at ./images on the Ghost domain.
         self.html_image_pattern = r'<img\b[^>]*?\bsrc="([^"]+)"'
+        # Frontmatter `image:` becomes Ghost's feature_image verbatim, so a
+        # local path there ends up resolved against the post URL and 404s.
+        # publish hides this when called with --featured-image, which uploads
+        # separately after the fact, but the next `update` writes the raw
+        # frontmatter value straight back over it.
+        self.frontmatter_image_pattern = r'(?m)^image:[ \t]*["\']?([^"\'\n]+?)["\']?[ \t]*$'
 
     def find_local_images(self, content: str, markdown_path: Path) -> List[Dict[str, Any]]:
         """
-        Find all local images in markdown content, in both markdown and HTML syntax
+        Find all local images in content: markdown syntax, HTML <img>, and frontmatter `image:`
+
+        Each distinct path is returned once even when referenced repeatedly,
+        since replace_urls rewrites every occurrence of a path in one pass.
 
         Args:
             content: The markdown content
@@ -29,16 +38,21 @@ class MarkdownProcessor:
             List of dictionaries containing image information
         """
         images = []
+        seen = set()
 
         # Find all image references
         refs = [(m.group(1), m.group(2), m) for m in re.finditer(self.image_pattern, content)]
         refs += [('', m.group(1), m) for m in re.finditer(self.html_image_pattern, content)]
+        refs += [('', m.group(1), m) for m in re.finditer(self.frontmatter_image_pattern, content)]
         refs.sort(key=lambda r: r[2].start())
 
         for alt_text, image_path, match in refs:
+            if image_path in seen:
+                continue
 
             # Check if it's a local image
             if self._is_local_image(image_path):
+                seen.add(image_path)
                 # Resolve the absolute path
                 if image_path.startswith('./'):
                     absolute_path = markdown_path.parent / image_path[2:]
@@ -96,6 +110,11 @@ class MarkdownProcessor:
 
             # Same path written as HTML: <img ... src="original_path" ...>
             pattern = r'(<img\b[^>]*?\bsrc=")' + re.escape(original_path) + r'(")'
+            replacement = r'\1' + public_url + r'\2'
+            content = re.sub(pattern, replacement, content)
+
+            # Frontmatter feature image: image: "original_path"
+            pattern = r'(?m)^(image:[ \t]*["\']?)' + re.escape(original_path) + r'(["\']?[ \t]*)$'
             replacement = r'\1' + public_url + r'\2'
             content = re.sub(pattern, replacement, content)
 
