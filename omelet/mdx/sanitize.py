@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import bleach
 
 
@@ -32,7 +34,27 @@ GHOST_ALLOWED_ATTRIBUTES = {
 }
 
 
+# Ghost's HTML-to-lexical converter maps any <figure> it sees onto its own
+# image card, which collapses a multi-image figure grid down to the first
+# image and concatenates every caption. These markers are the documented way
+# to hand Ghost a block verbatim instead. They are HTML comments, so
+# strip_comments=True below would delete them before Ghost ever sees them.
+# The markers always sit between complete blocks, so splitting on them leaves
+# balanced fragments that clean independently and rejoin losslessly. A
+# placeholder swap would be shorter but bleach drops the sentinel characters
+# that would make one collision-proof.
+KG_HTML_CARD_MARKER = re.compile(r"(<!--kg-card-(?:begin|end): html-->)")
+
+
 def sanitize(html: str) -> str:
+    parts = KG_HTML_CARD_MARKER.split(html)
+    return "".join(
+        part if KG_HTML_CARD_MARKER.fullmatch(part) else _clean(part)
+        for part in parts
+    )
+
+
+def _clean(html: str) -> str:
     return bleach.clean(
         html,
         tags=GHOST_ALLOWED_TAGS,

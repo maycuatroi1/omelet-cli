@@ -12,27 +12,31 @@ class MarkdownProcessor:
     
     def __init__(self):
         self.image_pattern = r'!\[(.*?)\]\(([^)]+)\)'
-    
+        # Posts may hand-author an HTML block (e.g. a figure grid) whose images
+        # markdown syntax cannot express. Those <img src> paths need uploading
+        # too, or publish leaves them pointing at ./images on the Ghost domain.
+        self.html_image_pattern = r'<img\b[^>]*?\bsrc="([^"]+)"'
+
     def find_local_images(self, content: str, markdown_path: Path) -> List[Dict[str, Any]]:
         """
-        Find all local images in markdown content
-        
+        Find all local images in markdown content, in both markdown and HTML syntax
+
         Args:
             content: The markdown content
             markdown_path: Path to the markdown file
-            
+
         Returns:
             List of dictionaries containing image information
         """
         images = []
-        
+
         # Find all image references
-        matches = re.finditer(self.image_pattern, content)
-        
-        for match in matches:
-            alt_text = match.group(1)
-            image_path = match.group(2)
-            
+        refs = [(m.group(1), m.group(2), m) for m in re.finditer(self.image_pattern, content)]
+        refs += [('', m.group(1), m) for m in re.finditer(self.html_image_pattern, content)]
+        refs.sort(key=lambda r: r[2].start())
+
+        for alt_text, image_path, match in refs:
+
             # Check if it's a local image
             if self._is_local_image(image_path):
                 # Resolve the absolute path
@@ -89,7 +93,12 @@ class MarkdownProcessor:
             pattern = r'(\!\[.*?\]\()' + re.escape(original_path) + r'(\))'
             replacement = r'\1' + public_url + r'\2'
             content = re.sub(pattern, replacement, content)
-        
+
+            # Same path written as HTML: <img ... src="original_path" ...>
+            pattern = r'(<img\b[^>]*?\bsrc=")' + re.escape(original_path) + r'(")'
+            replacement = r'\1' + public_url + r'\2'
+            content = re.sub(pattern, replacement, content)
+
         return content
 
     def find_plantuml_blocks(self, content: str) -> List[Dict[str, Any]]:
