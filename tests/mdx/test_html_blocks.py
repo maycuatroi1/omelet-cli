@@ -9,6 +9,13 @@ from omelet.mdx.sanitize import SanitizeError, is_invariant, sanitize
 
 BEGIN = "<!--kg-card-begin: html-->"
 END = "<!--kg-card-end: html-->"
+SENTINEL = "<!--omelet:widget-->"
+
+CANVAS = (
+    '<div class="tokenizer">'
+    '<canvas id="tokenizer-canvas" width="640" height="240"></canvas>'
+    "</div>"
+)
 
 SVG = (
     '<svg viewBox="0 0 200 40" role="img" aria-label="Sơ đồ khối">'
@@ -175,3 +182,49 @@ class TestDiagramSrc:
         )
         assert "Hình 2. Hai trục" in html
         assert is_invariant(html)
+
+
+class TestWidget:
+    def test_missing_src_is_an_error(self, citations_yaml):
+        with pytest.raises(ComponentError, match="missing required prop"):
+            compile_with("<Widget />", citations_yaml)
+
+    def test_wrong_suffix_is_rejected(self, citations_yaml):
+        (citations_yaml.parent / "w.svg").write_text(SVG, encoding="utf-8")
+        with pytest.raises(ComponentError, match="must point at"):
+            compile_with('<Widget src="./w.svg" />', citations_yaml)
+
+    def test_missing_file_names_the_path(self, citations_yaml):
+        with pytest.raises(ComponentError, match="not found"):
+            compile_with('<Widget src="./nope.html" />', citations_yaml)
+
+    def test_canvas_file_becomes_a_figure(self, citations_yaml):
+        (citations_yaml.parent / "w.html").write_text(CANVAS, encoding="utf-8")
+        html = compile_with('<Widget src="./w.html" />', citations_yaml)
+        assert 'class="omelet-widget"' in html
+        assert "<canvas" in html
+        assert 'id="tokenizer-canvas"' in html
+
+    def test_sentinel_sits_right_after_the_begin_marker(self, citations_yaml):
+        (citations_yaml.parent / "w.html").write_text(CANVAS, encoding="utf-8")
+        html = compile_with('<Widget src="./w.html" />', citations_yaml)
+        assert BEGIN in html and END in html
+        assert f"{BEGIN}\n{SENTINEL}" in html
+
+    def test_caption_and_extra_class(self, citations_yaml):
+        (citations_yaml.parent / "w.html").write_text(CANVAS, encoding="utf-8")
+        html = compile_with(
+            '<Widget src="./w.html" class="wide" caption="Hình 3. `BPE` chạy thật" />',
+            citations_yaml,
+        )
+        assert 'class="omelet-widget wide"' in html
+        assert '<figcaption class="omelet-widget__caption">' in html
+        assert "<code>BPE</code>" in html
+        assert "Hình 3." in html
+
+    def test_doctype_is_dropped(self, citations_yaml):
+        (citations_yaml.parent / "w.html").write_text(
+            "<!DOCTYPE html>\n" + CANVAS, encoding="utf-8"
+        )
+        html = compile_with('<Widget src="./w.html" />', citations_yaml)
+        assert "DOCTYPE" not in html
