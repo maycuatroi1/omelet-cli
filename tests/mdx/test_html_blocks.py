@@ -240,6 +240,22 @@ class TestWidget:
         with pytest.raises(SanitizeError, match="executable markup"):
             sanitize(html + f"{BEGIN}<div><script>alert(1)</script></div>{END}")
 
+    def test_nesting_inside_another_component_is_an_error(self, citations_yaml):
+        (citations_yaml.parent / "w.html").write_text(CANVAS, encoding="utf-8")
+        with pytest.raises(ComponentError, match="cấp cao nhất"):
+            compile_with(
+                '<Evidence claim="Tách token là bước tốn kém">\n'
+                '<Widget src="./w.html" />\n'
+                "</Evidence>",
+                citations_yaml,
+            )
+
+    def test_standing_alone_still_compiles(self, citations_yaml):
+        (citations_yaml.parent / "w.html").write_text(CANVAS, encoding="utf-8")
+        html = compile_with('<Widget src="./w.html" />', citations_yaml)
+        assert 'class="omelet-widget"' in html
+        assert is_invariant(html)
+
     def test_doctype_is_dropped(self, citations_yaml):
         (citations_yaml.parent / "w.html").write_text(
             "<!DOCTYPE html>\n" + CANVAS, encoding="utf-8"

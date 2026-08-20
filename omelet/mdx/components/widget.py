@@ -43,6 +43,13 @@ def _read_src(ctx, src: str) -> str:
 
 
 def render(ctx, props: dict, children_html_unused: str) -> str:
+    if len(ctx.parent_chain) > 1:
+        parent = ctx.parent_chain[-2]
+        raise ComponentError(
+            f"<{NAME}> phải dùng ở cấp cao nhất của bài, không được lồng trong "
+            f"<{parent}>. Lồng vào thì khối này mất marker riêng và script trong "
+            f"file html sẽ bị chặn."
+        )
     src = str(require_prop("src", props, NAME)).strip()
     if not src:
         raise ComponentError(f'<{NAME}> needs a src file, but src="" is empty')
