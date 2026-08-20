@@ -47,9 +47,18 @@ GHOST_ALLOWED_ATTRIBUTES = {
 # allowlist was never the security boundary here. _check_raw keeps the part
 # that still is - a pasted third-party embed carrying script or an inline
 # event handler fails the build instead of shipping.
+#
+# That is the whole threat model, and it is narrower than "no script in a post".
+# An interactive demo the author wrote themselves is not a pasted embed, so the
+# <Widget> component opens its card with WIDGET_SENTINEL and sanitize hands that
+# one block back untouched. The sentinel is not a password, it is a provenance
+# tag: only the compiler emits it, immediately after BEGIN_MARKER, around a
+# .html file read from the post's own directory. Markup a writer pasted from
+# elsewhere arrives without it and still fails the build.
 KG_HTML_CARD_MARKER = re.compile(r"(<!--kg-card-(?:begin|end): html-->)")
 BEGIN_MARKER = "<!--kg-card-begin: html-->"
 END_MARKER = "<!--kg-card-end: html-->"
+WIDGET_SENTINEL = "<!--omelet:widget-->"
 
 TAG = re.compile(r"<[/a-zA-Z][^>]*>")
 SCRIPT_TAG = re.compile(r"<\s*/?\s*script\b", re.IGNORECASE)
@@ -80,7 +89,10 @@ def sanitize(html: str) -> str:
             verbatim = opening
             out.append(part)
         elif verbatim:
-            out.append(_check_raw(part))
+            if part.lstrip().startswith(WIDGET_SENTINEL):
+                out.append(part)
+            else:
+                out.append(_check_raw(part))
         else:
             out.append(_clean(_check_needs_marker(part)))
     if verbatim:

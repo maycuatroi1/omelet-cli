@@ -222,6 +222,24 @@ class TestWidget:
         assert "<code>BPE</code>" in html
         assert "Hình 3." in html
 
+    def test_script_in_the_file_survives_sanitize(self, citations_yaml):
+        (citations_yaml.parent / "w.html").write_text(
+            CANVAS + '\n<script>document.title = "x";</script>', encoding="utf-8"
+        )
+        html = compile_with('<Widget src="./w.html" />', citations_yaml)
+        cleaned = sanitize(html)
+        assert "<script>" in cleaned
+        assert 'document.title = "x";' in cleaned
+        assert is_invariant(html)
+
+    def test_a_plain_card_next_to_a_widget_still_rejects_script(self, citations_yaml):
+        (citations_yaml.parent / "w.html").write_text(
+            CANVAS + "\n<script>void 0;</script>", encoding="utf-8"
+        )
+        html = compile_with('<Widget src="./w.html" />', citations_yaml)
+        with pytest.raises(SanitizeError, match="executable markup"):
+            sanitize(html + f"{BEGIN}<div><script>alert(1)</script></div>{END}")
+
     def test_doctype_is_dropped(self, citations_yaml):
         (citations_yaml.parent / "w.html").write_text(
             "<!DOCTYPE html>\n" + CANVAS, encoding="utf-8"

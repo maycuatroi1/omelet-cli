@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import re
 
+from ..sanitize import WIDGET_SENTINEL
 from . import ComponentError, opt_prop, register, require_prop, wrap_card
 
 
 NAME = "Widget"
 SOLE_PARAGRAPH = re.compile(r"\A<p>(.*)</p>\Z", re.DOTALL)
 ALLOWED_SUFFIX = (".html",)
-WIDGET_SENTINEL = "<!--omelet:widget-->"
 
 
 def _inline_md(ctx, text: str) -> str:
