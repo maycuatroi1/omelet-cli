@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from . import html_escape, register, require_prop
+from . import html_escape, register, require_prop, wrap_card
 
 
 NAME = "Source"
@@ -17,17 +17,22 @@ def render(ctx, props: dict, children_html: str) -> str:
     body_clean = body.strip()
     if body_clean.startswith("<p>") and body_clean.endswith("</p>") and body_clean.count("<p>") == 1:
         body_clean = body_clean[3:-4]
+    type_html = (
+        f'<span class="omelet-source__type">{html_escape(src_type)}</span>'
+    )
     date_html = (
         f'<time class="omelet-source__date" datetime="{html_escape(date)}">{html_escape(date)}</time>'
         if date else ""
     )
-    return (
+    return wrap_card(
+        ctx,
         f'<div class="omelet-source omelet-source--{html_escape(src_type)}">'
-        f'<a href="{html_escape(url)}" rel="noopener" target="_blank" class="omelet-source__link">'
+        f"{type_html}"
+        f"{date_html}"
+        f'<a href="{html_escape(url)}" rel="noopener" target="_blank" class="omelet-source__url">'
         f'{html_escape(url)}</a>'
-        f'{(" " + date_html) if date_html else ""}'
-        f'{(" — " + body_clean) if body_clean else ""}'
-        f"</div>"
+        f'{("<p>" + body_clean + "</p>") if body_clean else ""}'
+        f"</div>",
     )
 
 

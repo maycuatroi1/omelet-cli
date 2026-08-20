@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from . import ComponentError, html_escape, register, require_prop
+from . import ComponentError, html_escape, register, require_prop, wrap_card
 
 
 NAME = "Scenario"
@@ -19,13 +19,14 @@ def render(ctx, props: dict, children_html: str) -> str:
     trigger = require_prop("trigger", props, NAME)
     timeline = props.get("timeline", "")
     body = ctx.render_md(children_html) if children_html else ""
-    prob_display = probability.replace("-", "–") + "%"
+    prob_display = probability + "%"
     timeline_html = (
         f'<dt class="omelet-scenario__label">Khi nào</dt>'
         f'<dd class="omelet-scenario__timeline">{html_escape(timeline)}</dd>'
         if timeline else ""
     )
-    return (
+    return wrap_card(
+        ctx,
         f'<section class="omelet-scenario">'
         f'<header class="omelet-scenario__header">'
         f'<h3 class="omelet-scenario__title">{html_escape(title)}</h3>'
@@ -37,7 +38,7 @@ def render(ctx, props: dict, children_html: str) -> str:
         f"</dl>"
         f"</header>"
         f'<div class="omelet-scenario__body">{body}</div>'
-        f"</section>"
+        f"</section>",
     )
 
 

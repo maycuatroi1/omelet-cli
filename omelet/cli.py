@@ -1167,25 +1167,20 @@ def preview(file: Path, port: int, host: str, theme, no_browser: bool, no_watch_
 @click.argument("target", type=click.Path(exists=True), nargs=-1, required=True)
 @click.option("--strict", is_flag=True, help="Exit 1 khi có error (mặc định: chỉ báo cáo)")
 @click.option("--max-warn", type=int, default=None, help="Với --strict, fail luôn khi số warn vượt ngưỡng")
-@click.option("--min-citations", type=int, default=8, show_default=True,
-              help="Số citation tối thiểu cho bài dài")
-@click.option("--min-primary", type=float, default=0.5, show_default=True,
-              help="Tỉ lệ primary source tối thiểu")
 @click.option("--no-stats", is_flag=True, help="Bỏ panel độ sâu")
-@click.option("--only", help="Chỉ chạy các rule khớp prefix, vd: DEPTH hoặc SLOP-P2")
-def lint(target, strict, max_warn, min_citations, min_primary, no_stats, only):
-    """Soi bài viết: dấu hiệu AI slop + proxy độ sâu.
+@click.option("--only", help="Chỉ chạy các rule khớp prefix, ví dụ DEPTH hoặc FMT")
+def lint(target, strict, max_warn, no_stats, only):
+    """Kiểm tra tính toàn vẹn cơ học của nguồn bài viết.
 
     TARGET là file .md/.mdx hoặc folder bài viết (nhận nhiều target).
 
-    Linter chỉ thấy được thứ đếm được: cụm sáo rỗng, nhịp câu, số liệu không nguồn,
-    tỉ lệ primary source. Nó KHÔNG biết thesis của bạn có đúng không - phần đó nằm
-    ở spec.json của bài và ở người đọc lại.
+    Linter không phán xét văn phong hay cách tiếp cận. Hai quyết định đó nằm trong
+    brief/spec của từng bài và được người viết duyệt trước khi draft.
     """
     from .lint import Options, lint_path
     from .lint.report import print_report
 
-    opt = Options(min_citations=min_citations, min_primary_ratio=min_primary)
+    opt = Options()
 
     files = []
     for t in target:

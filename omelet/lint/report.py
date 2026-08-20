@@ -1,10 +1,7 @@
 """Terminal output for `omelet lint`.
 
-Two halves. The findings tell you what to fix. The depth panel tells you what the
-post *is* - how many words, how many sources, how many of those sources are
-primary, whether you made anything yourself. The panel has no pass/fail: it is
-there so you can look at a post and see, in five numbers, whether the work was
-actually done.
+Findings report broken source contracts. The stats panel describes the document
+without deciding what its prose should sound like.
 """
 
 from __future__ import annotations
@@ -12,14 +9,13 @@ from __future__ import annotations
 import click
 
 from .doc import Doc
-from .rules import Finding, Options, _is_primary
+from .rules import Finding, Options
 
 _COLOR = {"error": "red", "warn": "yellow", "info": "cyan"}
 
 
 def depth_stats(doc: Doc, opt: Options) -> dict:
     used = [k for k in doc.used_keys if k in doc.citations]
-    primary = [k for k in used if _is_primary(doc.citations[k])]
     sentences = [s for b in doc.prose_blocks for s in doc.sentences(b)]
     avg_len = (
         sum(len(s.split()) for s in sentences) / len(sentences) if sentences else 0.0
@@ -32,8 +28,6 @@ def depth_stats(doc: Doc, opt: Options) -> dict:
         "avg_sentence": round(avg_len, 1),
         "citations_used": len(doc.used_keys),
         "citations_resolved": len(used),
-        "primary": len(primary),
-        "primary_ratio": round(len(primary) / len(used), 2) if used else 0.0,
         "own_artifacts": len(doc.local_images),
         "bullet_pct": int(100 * bullet_words / total_words) if total_words else 0,
     }
@@ -54,8 +48,7 @@ def print_report(doc: Doc, findings: list[Finding], opt: Options, show_stats: bo
         click.echo(f"  chữ                {s['words']}")
         click.echo(f"  câu / dài trung bình  {s['sentences']} câu, {s['avg_sentence']} chữ/câu")
         click.echo(
-            f"  citation           {s['citations_resolved']}/{s['citations_used']} resolve được, "
-            f"{s['primary']} primary ({int(s['primary_ratio'] * 100)}%)"
+            f"  citation           {s['citations_resolved']}/{s['citations_used']} resolve được"
         )
         click.echo(f"  artifact tự làm    {s['own_artifacts']} hình/biểu đồ local")
         click.echo(f"  bullet             {s['bullet_pct']}% số chữ")

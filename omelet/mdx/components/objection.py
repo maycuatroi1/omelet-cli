@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from . import ComponentError, html_escape, register, require_prop
+from . import ComponentError, html_escape, register, require_prop, wrap_card
 
 
 NAME = "Objection"
@@ -17,13 +17,14 @@ def render(ctx, props: dict, children_html: str) -> str:
         raise ComponentError(
             f"<Objection> requires a rebuttal body (children cannot be empty)"
         )
-    return (
+    return wrap_card(
+        ctx,
         f'<section class="omelet-objection omelet-objection--{html_escape(strength)}">'
         f'<blockquote class="omelet-objection__claim">'
         f'<p>{html_escape(claim)}</p>'
         f"</blockquote>"
         f'<div class="omelet-objection__rebuttal">{body}</div>'
-        f"</section>"
+        f"</section>",
     )
 
 

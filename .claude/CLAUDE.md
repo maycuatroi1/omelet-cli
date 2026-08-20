@@ -42,10 +42,9 @@ A rule that lives only in a document is a rule a future agent violates silently.
 
 - `doc.py` - masks code, math, and URLs before any rule sees the text, so an em-dash inside a
   code sample is not mistaken for prose.
-- `rules.py` - SLOP-* (em-dash, marketing filler, AI closings, choppy rhythm), DEPTH-* (numbers
-  with no source, dead citation keys, primary-source ratio, no original artifact), VOICE-*, FMT-*.
-  Every rule carries a `fix` line: the message lands in an agent's context, which makes it the
-  cheapest prompt you will ever write.
+- `rules.py` - chỉ giữ contract cơ học như citation key phải resolve, frontmatter bắt buộc và
+  dollar amount không được phá KaTeX. Văn phong và cấu trúc không thuộc CLI; mỗi bài chọn riêng
+  trong brief/spec.
 - Reports only by default. `--strict` exits 1.
 
 **`lint` is not `aicheck`.** `aicheck` asks QuillBot whether a text is statistically
@@ -70,7 +69,7 @@ omelet publish <file.mdx>
 # Live preview with hot reload
 omelet preview <file.mdx>
 
-# Lint a post: AI slop + depth
+# Lint a post: source integrity
 omelet lint <file.mdx> [--strict]
 
 # Run tests

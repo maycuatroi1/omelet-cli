@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -50,6 +51,104 @@ class TestEvidence:
             )
 
 
+class TestGhostCardMarkers:
+    """Ghost keeps a blessed tag list and drops the rest, class attribute
+    included. Without these markers the theme CSS matches nothing and two
+    <Source> blocks collapse into one paragraph of naked URLs on the live post.
+    """
+
+    def test_block_component_is_wrapped(self, citations_yaml):
+        html = compile_with(
+            '<Evidence claim="X"><Source url="https://x.com">b</Source></Evidence>',
+            citations_yaml,
+        )
+        assert html.count("<!--kg-card-begin: html-->") == 1
+        assert html.count("<!--kg-card-end: html-->") == 1
+        assert html.index("<!--kg-card-begin: html-->") < html.index("omelet-evidence")
+
+    def test_nested_source_does_not_reopen_a_card(self, citations_yaml):
+        html = compile_with(
+            '<Evidence claim="X">'
+            '<Source url="https://a.com">a</Source>'
+            '<Source url="https://b.com">b</Source>'
+            "</Evidence>",
+            citations_yaml,
+        )
+        assert html.count("<!--kg-card-begin: html-->") == 1
+        assert html.count("omelet-source") >= 2
+        assert is_invariant(html)
+
+    def test_standalone_source_gets_its_own_card(self, citations_yaml):
+        html = compile_with('<Source url="https://x.com">b</Source>', citations_yaml)
+        assert html.count("<!--kg-card-begin: html-->") == 1
+
+    def test_objection_is_wrapped(self, citations_yaml):
+        html = compile_with(
+            '<Objection claim="C" strength="strong">rebuttal</Objection>',
+            citations_yaml,
+        )
+        assert html.count("<!--kg-card-begin: html-->") == 1
+        assert "omelet-objection--strong" in html
+
+
+class TestBibliographyCard:
+    """Ghost deletes <details> outright and strips the id off every <li>. Left
+    unwrapped, the whole source list disappears and every [n] in the body
+    becomes an anchor pointing at nothing, silently, only on the live post.
+    """
+
+    def _compile(self, citations_yaml):
+        return compile_mdx_string(
+            "Body [@khosla2025] và [@amodei-2026].",
+            citations_path=citations_yaml,
+            assets_dir=citations_yaml.parent,
+        )
+
+    def test_bibliography_is_wrapped(self, citations_yaml):
+        r = self._compile(citations_yaml)
+        assert r.bibliography_html.startswith("<!--kg-card-begin: html-->")
+        assert r.bibliography_html.endswith("<!--kg-card-end: html-->")
+        assert "<details" in r.bibliography_html
+
+    def test_anchors_have_targets(self, citations_yaml):
+        r = self._compile(citations_yaml)
+        refs = set(re.findall(r'href="#cite-([^"]+)"', r.body_html))
+        targets = set(re.findall(r'id="cite-([^"]+)"', r.bibliography_html))
+        assert refs
+        assert refs <= targets
+
+    def test_full_html_stays_sanitize_invariant(self, citations_yaml):
+        r = self._compile(citations_yaml)
+        assert is_invariant(r.html)
+
+
+class TestSourceVocabulary:
+    """Class names are the producer half of the mdx-component-vocabulary seam;
+    the theme in omelet.tech-template is the consumer and styles __url and
+    __type. Emitting __link instead means the CSS silently matches nothing.
+    """
+
+    def test_url_class_matches_the_theme(self, citations_yaml):
+        html = compile_with('<Source url="https://x.com">b</Source>', citations_yaml)
+        assert "omelet-source__url" in html
+        assert "omelet-source__link" not in html
+
+    def test_type_badge_is_emitted(self, citations_yaml):
+        html = compile_with(
+            '<Source url="https://x.com" type="sec-filing">b</Source>',
+            citations_yaml,
+        )
+        assert 'class="omelet-source__type">sec-filing<' in html
+
+    def test_no_banned_dashes(self, citations_yaml):
+        html = compile_with(
+            '<Source url="https://x.com" date="2026-01-08">b</Source>',
+            citations_yaml,
+        )
+        assert "—" not in html
+        assert "–" not in html
+
+
 class TestScenario:
     def test_basic(self, citations_yaml):
         html = compile_with(
@@ -57,7 +156,8 @@ class TestScenario:
             citations_yaml,
         )
         assert "Soft" in html
-        assert "35–45%" in html
+        assert "35-45%" in html
+        assert "–" not in html
 
     def test_single_probability(self, citations_yaml):
         html = compile_with(

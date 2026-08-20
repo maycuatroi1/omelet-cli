@@ -94,15 +94,17 @@ def _render_component(attrs: dict, ctx: RenderContext) -> str:
             raise ComponentError(f"Unknown component <{name}>")
         return f"<!-- unknown component: {name} -->"
 
-    children_html = ""
-    if not self_closing and children_raw:
-        if name == "Analogy":
-            props["__children_raw__"] = children_raw
-        else:
-            children_html = _render_children(children_raw, ctx, name)
-
+    # Pushed before the children render, not after: a nested component asks
+    # parent_chain whether anything already wraps it, and that answer has to be
+    # true while it is still being built.
     ctx.parent_chain.append(name)
     try:
+        children_html = ""
+        if not self_closing and children_raw:
+            if getattr(fn, "raw_children", False):
+                props["__children_raw__"] = children_raw
+            else:
+                children_html = _render_children(children_raw, ctx, name)
         return fn(ctx, props, children_html)
     finally:
         ctx.parent_chain.pop()

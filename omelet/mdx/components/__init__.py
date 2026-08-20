@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from ..citations import CiteRegistry
+from ..sanitize import BEGIN_MARKER, END_MARKER
 
 
 RenderFn = Callable[["RenderContext", dict, str], str]
@@ -77,3 +78,23 @@ def opt_prop(name: str, props: dict, default: object = "") -> object:
 def html_escape(s: object) -> str:
     import html as _h
     return _h.escape(str(s), quote=True)
+
+
+def wrap_card(ctx: "RenderContext", html: str) -> str:
+    """Hand a block component's markup to Ghost verbatim.
+
+    Ghost's html-to-lexical converter keeps a handful of blessed tags and
+    throws away the rest, class attribute included. Every block component here
+    renders an <aside>/<section>/<figure> whose class is the producer half of
+    the mdx-component-vocabulary seam, so without these markers the theme's CSS
+    matches nothing and two <Source> blocks collapse into one bare paragraph of
+    naked URLs. That damage is invisible until the post is on Ghost.
+
+    The markers cannot nest: a <Source> inside an <Evidence> is already inside
+    a verbatim region, and emitting a second BEGIN_MARKER there makes
+    sanitize() raise. parent_chain holds this component plus every component
+    above it, so a length of one means nothing is wrapping us yet.
+    """
+    if len(ctx.parent_chain) > 1:
+        return html
+    return f"{BEGIN_MARKER}\n{html}\n{END_MARKER}\n"

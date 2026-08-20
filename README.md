@@ -152,6 +152,35 @@ Some content here...
 - BMP
 - ICO
 
+## Raw HTML and SVG in MDX
+
+Ghost's HTML-to-lexical converter rewrites markup it recognises: every `<figure>`
+becomes its own image card, which collapses a multi-image grid to the first image
+and concatenates the captions. Wrapping a block in `<!--kg-card-begin: html-->` and
+`<!--kg-card-end: html-->` is the documented way to hand Ghost that block untouched.
+
+Whatever sits between those markers skips the bleach allowlist too, so inline SVG,
+`style` attributes and anything else survive to the published post. Script tags,
+`on*` event handlers and `javascript:` URLs still fail the build. An `<svg>` written
+*outside* the markers is an error rather than a silent strip, because the allowlist
+has no SVG vocabulary and would leave only the text nodes behind.
+
+`<Diagram>` writes the markers for you:
+
+```mdx
+<Diagram src="./diagrams/01-architecture.svg" caption="Hình 1. Ba khối `KDA` rồi một khối **MLA**." />
+
+<Diagram caption="Inline works too">
+<svg viewBox="0 0 200 40" role="img" aria-label="...">...</svg>
+</Diagram>
+```
+
+- `src` inlines an `.svg` or `.html` file at compile time, resolved next to the post.
+- Children are raw markup, never parsed as markdown. `caption` is inline markdown.
+- `class` appends to the emitted `omelet-diagram` class.
+- `<img src="./local.png">` inside the block is uploaded and rewritten like any other
+  local image, so screenshots can carry a real `<figcaption>`.
+
 ## Error Handling
 
 - Non-existent image files are reported but don't stop processing

@@ -8,6 +8,8 @@ from typing import Optional
 
 import yaml
 
+from .sanitize import BEGIN_MARKER, END_MARKER
+
 
 class CitationError(Exception):
     pass
@@ -114,7 +116,11 @@ def render_bibliography(reg: CiteRegistry, heading: str = "Phụ lục: Citation
         parts.append(_render_entry(entry))
     parts.append("</ol>")
     parts.append("</details>")
-    return "\n".join(parts)
+    # Ghost drops <details> outright and strips the id off every <li>, which
+    # turns all 60-odd [n] links in the body into anchors pointing at nothing
+    # and deletes the source list wholesale. Nothing in the build says so; the
+    # loss only shows on the published post.
+    return f"{BEGIN_MARKER}\n" + "\n".join(parts) + f"\n{END_MARKER}"
 
 
 def _render_entry(entry: CiteEntry) -> str:

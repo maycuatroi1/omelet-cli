@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from . import ComponentError, html_escape, register, require_prop
+from . import ComponentError, html_escape, register, require_prop, wrap_card
 from ..jsx_tokenizer import parse_component_at
 
 
@@ -64,12 +64,14 @@ def render(ctx, props: dict, children_html_unused: str) -> str:
             f"<div class=\"omelet-analogy__content\">{body}</div>"
             f"</div>"
         )
-    return (
+    return wrap_card(
+        ctx,
         f'<figure class="omelet-analogy">'
         f'<figcaption class="omelet-analogy__title">{html_escape(title)}</figcaption>'
         f"{''.join(panels)}"
-        f"</figure>"
+        f"</figure>",
     )
 
 
+render.raw_children = True
 register(NAME, render)
