@@ -262,3 +262,63 @@ class TestWidget:
         )
         html = compile_with('<Widget src="./w.html" />', citations_yaml)
         assert "DOCTYPE" not in html
+
+
+class TestVideo:
+    MP4 = "https://storage.googleapis.com/b/v.mp4"
+    PNG = "https://storage.googleapis.com/b/v.png"
+
+    def test_missing_src_is_an_error(self, citations_yaml):
+        with pytest.raises(ComponentError, match="missing required prop"):
+            compile_with("<Video />", citations_yaml)
+
+    def test_local_path_is_rejected_with_the_upload_reason(self, citations_yaml):
+        with pytest.raises(ComponentError, match="omelet publish"):
+            compile_with('<Video src="./v.mp4" />', citations_yaml)
+
+    def test_wrong_suffix_is_rejected(self, citations_yaml):
+        with pytest.raises(ComponentError, match="must point at"):
+            compile_with(
+                '<Video src="https://storage.googleapis.com/b/v.gif" />',
+                citations_yaml,
+            )
+
+    def test_query_string_does_not_hide_the_suffix(self, citations_yaml):
+        html = compile_with(f'<Video src="{self.MP4}?v=2" />', citations_yaml)
+        assert 'type="video/mp4"' in html
+
+    def test_becomes_a_figure_inside_markers(self, citations_yaml):
+        html = compile_with(f'<Video src="{self.MP4}" />', citations_yaml)
+        assert 'class="omelet-video"' in html
+        assert "<video" in html and "controls" in html
+        assert f'<source src="{self.MP4}" type="video/mp4">' in html
+        assert BEGIN in html and END in html
+        assert is_invariant(html)
+
+    def test_poster_and_caption(self, citations_yaml):
+        html = compile_with(
+            f'<Video src="{self.MP4}" poster="{self.PNG}" '
+            f'class="wide" caption="Hình 5. `token` chạy thật" />',
+            citations_yaml,
+        )
+        assert 'class="omelet-video wide"' in html
+        assert f'poster="{self.PNG}"' in html
+        assert '<figcaption class="omelet-video__caption">' in html
+        assert "<code>token</code>" in html
+
+    def test_survives_sanitize(self, citations_yaml):
+        html = compile_with(f'<Video src="{self.MP4}" />', citations_yaml)
+        cleaned = sanitize(html)
+        assert "<video" in cleaned
+        assert f'src="{self.MP4}"' in cleaned
+
+    def test_javascript_url_is_rejected(self, citations_yaml):
+        with pytest.raises(ComponentError, match="URL https"):
+            compile_with('<Video src="javascript:alert(1).mp4" />', citations_yaml)
+
+    def test_nested_video_names_the_parent(self, citations_yaml):
+        with pytest.raises(ComponentError, match="cấp cao nhất"):
+            compile_with(
+                f'<Evidence claim="x">\n<Video src="{self.MP4}" />\n</Evidence>',
+                citations_yaml,
+            )
