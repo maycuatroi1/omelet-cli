@@ -181,6 +181,32 @@ has no SVG vocabulary and would leave only the text nodes behind.
 - `<img src="./local.png">` inside the block is uploaded and rewritten like any other
   local image, so screenshots can carry a real `<figcaption>`.
 
+## Interactive Widgets in MDX
+
+`<Widget>` is the one slot in a post that is allowed to carry a `<script>`. It reads
+an `.html` file sitting next to the post, drops the file in verbatim, and marks the
+block with `<!--omelet:widget-->` right after `<!--kg-card-begin: html-->`. Sanitize
+recognises that sentinel and skips the executable-markup check for that block only.
+
+```mdx
+<Widget src="./widgets/bpe-demo.html" caption="Hình 3. Gõ một từ và xem `BPE` cắt nó." />
+```
+
+- `src` is required, must end in `.html`, and is resolved inside the post's own
+  directory. Anything else fails the build.
+- `caption` is optional and parsed as inline markdown. `class` is optional and
+  appends to the emitted `omelet-widget` class.
+- The tag must sit at the top level of the post. Nesting it inside another component
+  raises a `ComponentError`, because a nested block never gets its own marker and its
+  script would be stripped anyway.
+- omelet-cli ships no CSS for `.omelet-widget`. The widget file carries its own
+  inline styles.
+
+Only the compiler writes that sentinel, and only around a file read from the post's
+directory. Every other `kg-card` block - including one you type by hand - still fails
+the build with a `SanitizeError` the moment it holds a `<script>` tag, an `on*`
+attribute, or a `javascript:` URL.
+
 ## Error Handling
 
 - Non-existent image files are reported but don't stop processing
