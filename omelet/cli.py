@@ -1208,6 +1208,36 @@ def lint(target, strict, max_warn, no_stats, only):
         sys.exit(1)
 
 
+@cli.group()
+def widget():
+    """Kiểm tra widget HTML (canvas, style) trước khi nhúng vào bài."""
+    pass
+
+
+@widget.command("check")
+@click.argument("file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--theme", "theme", type=click.Path(exists=True, dir_okay=False, path_type=Path), default=None, help="Đường dẫn screen.css của theme (mặc định tự tìm trong ~/github/omelet.tech-template)")
+@click.option("--settle-ms", default=900, type=int, help="Thời gian chờ animation chạy trước khi probe (ms)")
+@click.option("--allow-blank-canvas", is_flag=True, help="Canvas trắng chỉ warn thay vì error (widget vẽ khi tương tác)")
+@click.option("--json", "as_json", is_flag=True, help="Xuất report JSON")
+def widget_check(file: Path, theme, settle_ms: int, allow_blank_canvas: bool, as_json: bool):
+    """Dựng harness (theme CSS + widget markup), load headless Chromium, probe render state."""
+    from .widget_check import check_widget, print_report, report_json
+
+    report = check_widget(
+        file,
+        theme_override=theme,
+        settle_ms=settle_ms,
+        allow_blank_canvas=allow_blank_canvas,
+    )
+    if as_json:
+        click.echo(report_json(report))
+    else:
+        print_report(report)
+    if not report["ok"]:
+        sys.exit(1)
+
+
 def main():
     """Entry point for the CLI"""
     cli()
